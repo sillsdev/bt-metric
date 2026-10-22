@@ -1,0 +1,35 @@
+language	name	extract_codes	preferred_extract
+ary	Moroccan Arabic	ary	
+arz	Egyptian Arabic	arz	
+bn	Bengali	bn,ben	
+cs	Czech	cs,ces	
+de	German	de,deu	
+en	English	en,eng	en-BSB
+et	Estonian	et,est,ekk	
+fi	Finnish	fi,fin	
+fr	French	fr,fra	
+gu	Gujarati	gu,guj	
+ha	Hausa	ha,hau	
+hi	Hindi	hi,hin	
+ibo	Igbo	ig,ibo	
+is	Icelandic	is,isl	
+ja	Japanese	ja,jpn	
+kik	Kikuyu	ki,kik	
+kk	Kazakh	kk,kaz	
+km	Khmer	km,khm	
+lt	Lithuanian	lt,lit	
+luo	Luo	luo	
+lv	Latvian	lv,lav,lvs	
+pl	Polish	pl,pol	
+ps	Pashto	ps,pus,pbt,pbu	
+ru	Russian	ru,rus	
+som	Somali	so,som	
+swh	Swahili	sw,swa,swh	
+ta	Tamil	ta,tam	
+tr	Turkish	tr,tur	
+twi	Twi	tw,twi,aka	
+uk	Ukrainian	uk,ukr	
+xh	Xhosa	xh,xho	
+yor	Yoruba	yo,yor	
+zh	Chinese	zh,zho,cmn	
+zu	Zulu	zu,zul	

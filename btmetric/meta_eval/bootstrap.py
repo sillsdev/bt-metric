@@ -19,7 +19,7 @@ class PairedBootstrapResult:
 
 
 class PairedBootstrap:
-    """Paired bootstrap test (Koehn 2004) of the score difference A − B on the same test verses."""
+    """Paired bootstrap test (Koehn 2004) of the score difference A - B on the same test verses."""
 
     def __init__(self, aggregate: Aggregator, samples: int = 1000, confidence: float = 0.95, seed: int = 0) -> None:
         self._aggregate = aggregate

@@ -16,8 +16,8 @@ class Interval:
 class PairwiseAgreement:
     """Agreement between gold and metric score differences over a set of compared pairs.
 
-    Each pair is one comparison (system A vs. B, or segment i vs. j) given as the gold difference A − B
-    and the metric difference A − B.
+    Each pair is one comparison (system A vs. B, or segment i vs. j) given as the gold difference A - B
+    and the metric difference A - B.
     """
 
     def __init__(self, gold_deltas: Sequence[float], metric_deltas: Sequence[float]) -> None:

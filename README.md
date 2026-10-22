@@ -41,11 +41,29 @@ Download WMT MQM, WMT DA and AfriMTE into `data/external/`:
 uv run btmetric-download-datasets
 ```
 
+## Bible corpora for the simulated low-resource setup
+
+List the Scripture extracts available in each language of the human-judgment sets, with verse counts, and pick the most complete one (or a preferred one, set in `btmetric/scripture/evaluation_languages.tsv`):
+
+```
+uv run btmetric-find-bible-corpora --scripture M:/MT/scripture M:/eBible/MT/scripture
+```
+
+## Meta-evaluation
+
+Score features against the human judgments: system-level pairwise accuracy on WMT MQM, and segment-level acc_eq (WMT DA, MQM) or Kendall's tau-b (AfriMTE):
+
+```
+uv run btmetric-meta-evaluate --features chrf3 chrf3++
+```
+
 Generated and downloaded files go in `data/`, which is not committed.
 
 ## Layout
 
 - `btmetric/experiments`: indexing past silnlp experiments and finding system pairs
-- `btmetric/scripture`: Scripture extracts and Paratext project metadata (back translation pairing)
+- `btmetric/scripture`: Scripture extracts and Paratext project metadata (back translation pairing, Bible corpora)
 - `btmetric/datasets`: downloading public human-judgment datasets
-- `btmetric/meta_eval`: meta-evaluation statistics (pairwise accuracy, acc_eq with tie calibration, bootstrap intervals, paired bootstrap significance)
+- `btmetric/evaluation`: the common data model (evaluation sets, system outputs, human judgments) and its loaders
+- `btmetric/features`: the `Feature` interface every metric component implements, and the chrF baseline
+- `btmetric/meta_eval`: meta-evaluation statistics (pairwise accuracy, acc_eq with tie calibration, bootstrap intervals, paired bootstrap significance) and the runner

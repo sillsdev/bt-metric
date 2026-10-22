@@ -132,6 +132,12 @@ Use sets that have references, multiple systems and human judgments:
 | IndicMT-Eval | MQM for 5 Indic languages, 7 systems | Data is only shared as a Google Sheet; not downloaded yet |
 | mt-metrics-eval (`mt-metrics-eval-v2.tgz`) | Full WMT data with system outputs and human scores per system | The Google Cloud archive refused anonymous downloads (403) in October 2026; needs another route |
 
+**Baselines so far** (`btmetric-meta-evaluate`, October 2026):
+
+- chrF3 system-level pairwise accuracy on WMT MQM 2020–22 is **0.72** (95% CI 0.69–0.75, 830 system pairs); chrF3++ is 0.73. This is close to the ~0.73 the WMT22 findings report for chrF (recalled, not checked), so the harness seems to reproduce published numbers.
+- Segment-level acc_eq ranges from 0.41 to 0.62 across WMT sets.
+- Kendall's tau-b on AfriMTE is 0.21.
+
 **Gap:** none of the downloaded sets supports **system-level** evaluation in a lower-resource language. DA data with system names, from mt-metrics-eval or the WMT findings repositories, or IndicMT-Eval's 7 systems, would fill it. Until then, system-level evidence for lower-resource languages comes from the Bible-domain tests (§3.3).
 
 **Mapping MQM categories to criteria** gives a separate human label for each sub-score:
@@ -150,6 +156,13 @@ The human-judged sets cover languages with plenty of resources. In real use, eve
 - **Comparison condition:** compute the same features with full-resource models (e.g. NLLB) to measure how much each feature degrades under realistic constraints.
 
 The auxiliary models are trained on the Bible but tested on news. That makes these results conservative, since real use is Bible on Bible.
+
+**Bible coverage** (`btmetric-find-bible-corpora` over `MT/scripture` and `eBible/MT/scripture`, October 2026):
+
+- 32 of the 34 test-set languages have a full or near-full Bible.
+- Estonian and Icelandic have essentially only the NT; Lithuanian has about 7,100 verses.
+- Xhosa and Zulu have no extract, so the xh–zu and zu–xh DA sets can't be simulated.
+- English uses `en-BSB` instead of the most complete extract, which is a back-translation.
 
 ### 3.3 Bible-domain validation (no human judgments)
 
@@ -331,17 +344,19 @@ Each experiment directory typically contains:
 - 153 series × target-language groups have at least 5 experiments; 255 have at least 3.
 - The file mixes two row formats (long and wide), so it needs tolerant parsing. It's stale, so rebuild it from the experiment directories rather than relying on it.
 
-**Shared test sets.** A system pair is only valid if both systems were scored on the **same verses against the same reference**. The same series and language don't guarantee that, because data, seeds and test sizes change. A scan of `MT/experiments` (up to 3 levels deep) grouped experiments by a hash of `test.vref.txt` + `test.trg.detok.txt`:
+**Shared test sets.** A system pair is only valid if both systems were scored on the **same verses against the same reference**. The same series and language don't guarantee that, because data, seeds and test sizes change. `btmetric-index-experiments` (4 levels deep) groups outputs by a hash of `test.vref.txt` + `test.trg.detok.txt`, and `btmetric-find-system-pairs` pairs them (October 2026):
 
-- 12,141 prediction files in 7,722 experiment directories with 5,117 distinct test sets. That is far more than the index lists, which confirms it's out of date.
-- Test sets shared by at least 2 experiments: **1,303**; at least 3: 617; at least 5: 219; at least 10: 37. The largest groups have 20–25 systems.
-- About **9,900 experiment-level system pairs** on identical test sets. Comparing checkpoints adds more: 2,944 experiments have at least two.
-- Median shared test set: 250 verses (quartiles 250–655).
+- 15,555 system outputs in 10,205 experiment directories with 6,728 distinct test sets. That is far more than the old index lists, which confirms it's out of date.
+- 58,941 pairs of distinct outputs on identical test sets. Pairs with identical predictions are already removed. Each pair is labelled by how the systems differ:
 
-Before using the pairs:
+| Pair type | Held-out books | Random verses |
+|---|---|---|
+| Different configs | **9,587** pairs, 280 test sets, ~122 target languages, median 837 verses | **41,028** pairs, 1,234 test sets, ~412 languages, median 250 verses |
+| Checkpoints of one experiment | 900 | 4,520 |
+| Reruns of one config | 310 | 2,452 |
 
-- Remove reruns of the same configuration (compare effective configs) and pairs whose outputs are nearly identical. Neither tells you anything about ranking.
-- Record what differs within each pair (data, source texts, model, tokenizer) so results can be broken down by type of difference.
+- The configs most often differ in source texts, model and learning rate. The differing config keys are recorded for each pair, so results can be broken down by type of difference.
+- Still to do: drop pairs whose outputs are *nearly* identical, since they tell you nothing about ranking.
 
 **Test-set design.** Many experiments use `test_size: 250` with a fixed seed. That is a random sample of verses rather than held-out books. Consequences:
 

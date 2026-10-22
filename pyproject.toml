@@ -8,6 +8,7 @@ dependencies = [
     "numpy>=2.2.6,<3.0.0",
     "pandas>=2.2,<3",
     "pyyaml>=6.0,<7",
+    "sacrebleu>=2.6,<3",
     "scipy>=1.11.2,<2",
 ]
 
@@ -16,6 +17,8 @@ btmetric-index-experiments = "btmetric.experiments.index:main"
 btmetric-find-system-pairs = "btmetric.experiments.pairs:main"
 btmetric-pair-back-translations = "btmetric.scripture.back_translations:main"
 btmetric-download-datasets = "btmetric.datasets.download:main"
+btmetric-find-bible-corpora = "btmetric.scripture.corpora:main"
+btmetric-meta-evaluate = "btmetric.meta_eval.runner:main"
 
 [dependency-groups]
 dev = [
