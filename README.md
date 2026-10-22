@@ -57,6 +57,12 @@ Score features against the human judgments: system-level pairwise accuracy on WM
 uv run btmetric-meta-evaluate --features chrf3 chrf3++
 ```
 
+Count the verses on which each pair's outputs differ. This adds `differing_verses`, `differing_fraction` and `near_identical` (under 10% of verses differ, by default) to the pairs file. Pairs whose predictions can't be aligned verse by verse get no fraction:
+
+```
+uv run btmetric-measure-pair-differences M:/MT/experiments --pairs data/system_pairs.tsv
+```
+
 Generated and downloaded files go in `data/`, which is not committed.
 
 ## Layout

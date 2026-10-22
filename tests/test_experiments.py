@@ -1,9 +1,11 @@
 from pathlib import Path
 
+import numpy as np
 import yaml
 
 from btmetric.experiments.index import ExperimentScanner
 from btmetric.experiments.pairs import SystemPairFinder
+from btmetric.experiments.similarity import PairDifferences, PredictionFiles
 
 
 def write_experiment(directory: Path, config: dict, predictions: dict, vrefs: str = "MAT 1:1\nMAT 1:2\n") -> None:
@@ -66,3 +68,19 @@ def test_pairs_classify_checkpoints_and_reruns_and_drop_identical_outputs(tmp_pa
     relations = sorted(pairs["relation"])
     assert len(pairs) == 3
     assert relations == ["checkpoint", "rerun", "rerun"]
+
+
+def test_pair_differences_count_verses_whose_predictions_differ(tmp_path: Path):
+    write_experiment(tmp_path / "a", config("en-NIV"), {"1000": "same\nx\n"})
+    write_experiment(tmp_path / "b", config("en-NLT"), {"1000": "same \ny\n"})
+    write_experiment(tmp_path / "c", config("en-GNT"), {"1000": "one line only\n"})
+    pairs = SystemPairFinder(scan(tmp_path)).pairs()
+    measured = PairDifferences(PredictionFiles(tmp_path), workers=2).measure(pairs)
+    by_systems = {
+        frozenset((a.split("|")[0], b.split("|")[0])): (verses, fraction)
+        for a, b, verses, fraction in measured[
+            ["system_a", "system_b", "differing_verses", "differing_fraction"]
+        ].itertuples(index=False)
+    }
+    assert by_systems[frozenset("ab")] == (1, 0.5)
+    assert np.isnan(by_systems[frozenset("ac")][0])

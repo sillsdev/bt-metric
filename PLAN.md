@@ -356,7 +356,11 @@ Each experiment directory typically contains:
 | Reruns of one config | 310 | 2,452 |
 
 - The configs most often differ in source texts, model and learning rate. The differing config keys are recorded for each pair, so results can be broken down by type of difference.
-- Still to do: drop pairs whose outputs are *nearly* identical, since they tell you nothing about ranking.
+- `btmetric-measure-pair-differences` counts the verses on which each pair's outputs differ.
+  - Most pairs differ almost everywhere: the median config pair differs on 99.6% of verses, a rerun pair on 95.6%, a checkpoint pair on 93.9%.
+  - 52 pairs differ on under 10% of verses and are flagged `near_identical`.
+  - 734 pairs, from 43 test sets, have predictions whose line count doesn't match the test set (outputs with extra line breaks or merged verses). They can't be aligned verse by verse and are left out.
+  - That leaves **58,155 usable pairs**: 9,585 config pairs on held-out books and 40,393 on random verses, plus checkpoint and rerun pairs.
 
 **Test-set design.** Many experiments use `test_size: 250` with a fixed seed. That is a random sample of verses rather than held-out books. Consequences:
 
