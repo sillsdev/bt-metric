@@ -155,3 +155,12 @@ def test_segment_level_uses_acc_eq_within_items_and_kendall_without_them():
     single = grouped.assign(item=[0, 1])
     result = evaluator.evaluate(SegmentJudgments("single", single), ChrF())
     assert result.statistic == "kendall_tau_b"
+
+
+def test_results_file_replaces_rows_of_rerun_features(tmp_path: Path):
+    from btmetric.meta_eval.runner import ResultsFile
+
+    path = tmp_path / "results.tsv"
+    ResultsFile(path).merge(pd.DataFrame({"feature": ["chrF3", "BLEU"], "value": [0.1, 0.2]}))
+    table = ResultsFile(path).merge(pd.DataFrame({"feature": ["chrF3"], "value": [0.9]}))
+    assert sorted(zip(table["feature"], table["value"])) == [("BLEU", 0.2), ("chrF3", 0.9)]

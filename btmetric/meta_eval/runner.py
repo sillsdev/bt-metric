@@ -5,7 +5,7 @@ import logging
 import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -15,6 +15,8 @@ from ..evaluation.data import JudgedOutputs, SegmentJudgments
 from ..evaluation.loaders import AfriMteLoader, WmtDaLoader, WmtMqmLoader
 from ..features.base import Feature
 from ..features.chrf import ChrF
+from ..features.comet import Comet
+from ..features.lexical import Bleu, MeanChrF, NegativeTer
 from .agreement import PairwiseAgreement
 
 LOGGER = logging.getLogger(__name__)
@@ -131,21 +133,54 @@ class SegmentLevelEvaluator:
         return np.concatenate(gold_deltas), np.concatenate(metric_deltas)
 
 
+class ResultsFile:
+    """Accumulates results across runs: rerunning a feature replaces its earlier rows."""
+
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    def merge(self, new_results: pd.DataFrame) -> pd.DataFrame:
+        table = new_results
+        if self._path.is_file():
+            previous = pd.read_csv(self._path, sep="\t")
+            table = pd.concat([previous[~previous["feature"].isin(new_results["feature"])], new_results])
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        table.to_csv(self._path, sep="\t", index=False)
+        return table
+
+
 class FeatureRegistry:
+    """Features by name, built on first use: some load models or download tokenizers when constructed."""
+
     def __init__(self) -> None:
-        self._features: Dict[str, Feature] = {feature.name.lower(): feature for feature in (ChrF(0), ChrF(2))}
+        self._factories: Dict[str, Callable[[], Feature]] = {
+            "chrf3": lambda: ChrF(0),
+            "chrf3++": lambda: ChrF(2),
+            "m-chrf3": lambda: MeanChrF(0),
+            "bleu": lambda: Bleu("13a"),
+            "spbleu": lambda: Bleu("flores200"),
+            "ter": NegativeTer,
+            "comet22": lambda: Comet("COMET-22", "Unbabel/wmt22-comet-da"),
+            "africomet": lambda: Comet("AfriCOMET", "masakhane/africomet-stl-1.1"),
+        }
+        # Run only when asked for: neural features need a GPU, and sacrebleu's TER is pure Python and takes over an
+        # hour on the WMT sets while ranking almost exactly like chrF and BLEU.
+        self._opt_in = {"ter", "comet22", "africomet"}
 
     def names(self) -> List[str]:
-        return list(self._features)
+        return list(self._factories)
+
+    def default_names(self) -> List[str]:
+        return [name for name in self._factories if name not in self._opt_in]
 
     def get(self, name: str) -> Feature:
-        return self._features[name.lower()]
+        return self._factories[name.lower()]()
 
 
 def main() -> None:
     registry = FeatureRegistry()
     parser = argparse.ArgumentParser(description="Meta-evaluate features against human judgments")
-    parser.add_argument("--features", nargs="+", default=registry.names(), choices=registry.names())
+    parser.add_argument("--features", nargs="+", default=registry.default_names(), choices=registry.names())
     parser.add_argument("--data-dir", type=Path, default=Path("data/external"))
     parser.add_argument("--output", type=Path, default=Path("data/results/meta_eval.tsv"))
     parser.add_argument("--max-items", type=int, default=2000, help="Items sampled per set for segment level")
@@ -153,23 +188,28 @@ def main() -> None:
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    features = [registry.get(name) for name in args.features]
     system_level = SystemLevelEvaluator(args.exclude_systems)
     segment_level = SegmentLevelEvaluator(args.max_items, tie_epsilons=[0.0, 0.5, 1.0, 2.0, 4.0])
-    results: List[MetaEvalResult] = []
+    results_file = ResultsFile(args.output)
 
     mqm = list(WmtMqmLoader(args.data_dir / "wmt-mqm" / "wmt-mqm-human-evaluation.csv").judged_outputs())
     da = list(WmtDaLoader(args.data_dir / "wmt-da" / "wmt-da-human-evaluation.csv").segment_judgments())
     afrimte = list(AfriMteLoader(args.data_dir / "afrimte" / "AfriMTE-ade-devtest-v2-with-score").segment_judgments())
-    for feature in features:
-        LOGGER.info(f"Meta-evaluating {feature.name}")
-        results.extend(system_level.evaluate(mqm, feature, "wmt-mqm"))
-        for judgments in [outputs.segment_judgments() for outputs in mqm] + da + afrimte:
-            results.append(segment_level.evaluate(judgments, feature))
+    for name in args.features:
+        # One feature at a time, closed afterwards, so at most one model is on the GPU.
+        feature = registry.get(name)
+        results: List[MetaEvalResult] = []
+        try:
+            LOGGER.info(f"Meta-evaluating {feature.name}")
+            results.extend(system_level.evaluate(mqm, feature, "wmt-mqm"))
+            for judgments in [outputs.segment_judgments() for outputs in mqm] + da + afrimte:
+                results.append(segment_level.evaluate(judgments, feature))
+        finally:
+            feature.close()
+        # Saved per feature, so stopping a long run keeps every feature that finished.
+        table = results_file.merge(pd.DataFrame([asdict(result) for result in results]))
+        LOGGER.info(f"Saved {feature.name} results to {args.output}")
 
-    table = pd.DataFrame([asdict(result) for result in results])
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    table.to_csv(args.output, sep="\t", index=False)
     pooled = table[table["dataset"].str.endswith("(pooled)")]
     LOGGER.info(f"System-level pairwise accuracy:\n{pooled.to_string(index=False)}")
     segment = table[table["level"] == "segment"]

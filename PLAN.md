@@ -230,6 +230,38 @@ Run on every evaluation above:
 - AfriCOMET
 - an LLM judge where feasible
 
+**Phase 2 results so far** (October 2026; `data/results/`). Still missing: TER (implemented, but sacrebleu's version takes over an hour, so it isn't run by default), xCOMET (gated model) and an LLM judge.
+
+*Agreement with human judgments.* System level is pairwise accuracy on WMT MQM 2020–22, 830 system pairs. Segment level is acc_eq averaged over WMT 2021–22 sets, and Kendall's tau-b on AfriMTE.
+
+| Metric | System level (95% CI) | WMT 21–22 segment acc_eq | AfriMTE tau-b |
+|---|---|---|---|
+| COMET-22 | **0.784** (0.758–0.814) | 0.46–0.54 | 0.255 |
+| AfriCOMET | 0.778 (0.752–0.808) | 0.46–0.54 | **0.320** |
+| m-chrF3 | 0.747 (0.718–0.776) | 0.41–0.52 | 0.213 |
+| chrF3++ | 0.729 (0.699–0.758) | 0.41–0.52 | 0.214 |
+| chrF3 | 0.723 (0.693–0.752) | 0.41–0.52 | 0.213 |
+| spBLEU | 0.723 (0.693–0.754) | 0.41–0.51 | 0.182 |
+| BLEU | 0.718 (0.688–0.749) | 0.41–0.44 | 0.176 |
+
+COMET-22 was trained on WMT 2017–20 direct-assessment data, so its scores on those years are inflated; compare it on WMT 2021–22 and AfriMTE. The lexical metrics are statistically indistinguishable from one another at system level.
+
+*Failure mode: valid human translations are scored below MT* (§3.3b).
+
+- **Bible.** Test set: Hebrew OT → English NASB, 22 MT systems, 3,000 held-out verses. The table gives the share of MT systems each published translation outscores:
+
+  | Translation | chrF3 | BLEU | COMET-22 | AfriCOMET |
+  |---|---|---|---|---|
+  | ESV, NKJV, RSV, NRSV, BSB, CSB, WEB, NIV (same tradition as NASB) | 100% | 64–100% | 100% | 100% |
+  | NET | 77% | 64% | 100% | 100% |
+  | NLT | 64% | 64% | 100% | 100% |
+  | GNT | 64% | 50% | 82% | 68% |
+  | LSV, YLT (literal, archaic) | 64% | 64% | 64% | 64–68% |
+  | CEV | **0%** | **0%** | 64% | 64% |
+
+  Every lexical metric scores CEV below every MT system. COMET helps with NLT and NET, but about 8 MT systems still outscore CEV, LSV, YLT and partly GNT under every metric. The new metric needs to fix this.
+- **WMT.** 11 alternative human translations (excluding the one used as reference) were judged with MQM alongside MT systems. MQM raters ranked them 3.5th on average out of about 14 systems; every lexical metric ranked them about 11th. Typical cases: MQM 1st → chrF3 9th of 10; MQM 2nd → 16th of 16.
+
 ### 3.5 Meta-evaluation statistics
 
 - **Main statistic:** system-level pairwise accuracy (Kocmi et al. 2021).

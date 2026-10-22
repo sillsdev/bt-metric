@@ -1,0 +1,21 @@
+# COMET runs in its own environment: unbabel-comet requires numpy<2, which the main project (Python 3.13,
+# numpy 2) can't use. btmetric.features.comet starts worker.py in this environment.
+[project]
+name = "btmetric-comet-worker"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "torch>=2.7",
+    "unbabel-comet>=2.2.4",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

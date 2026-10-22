@@ -25,3 +25,6 @@ class Feature(ABC):
     def system_score(self, sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]) -> float:
         """The score for a whole system output; features with a corpus-level form (e.g. chrF) override this."""
         return float(np.mean(self.segment_scores(sources, hypotheses, references)))
+
+    def close(self) -> None:
+        """Releases models or worker processes the feature holds."""

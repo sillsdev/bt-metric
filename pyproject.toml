@@ -3,13 +3,14 @@ name = "btmetric"
 version = "0.1.0"
 description = "Research on a translation quality metric for minority language Bible translation"
 authors = [{ name = "SIL International" }]
-requires-python = ">=3.12,<3.14"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy>=2.2.6,<3.0.0",
     "pandas>=2.2,<3",
     "pyyaml>=6.0,<7",
     "sacrebleu>=2.6,<3",
     "scipy>=1.11.2,<2",
+    "sentencepiece>=0.2.0,<0.3",
 ]
 
 [project.scripts]
@@ -20,6 +21,7 @@ btmetric-pair-back-translations = "btmetric.scripture.back_translations:main"
 btmetric-download-datasets = "btmetric.datasets.download:main"
 btmetric-find-bible-corpora = "btmetric.scripture.corpora:main"
 btmetric-meta-evaluate = "btmetric.meta_eval.runner:main"
+btmetric-test-human-translations = "btmetric.analysis.human_translations:main"
 
 [dependency-groups]
 dev = [
