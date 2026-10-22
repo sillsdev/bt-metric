@@ -1,5 +1,6 @@
 """Loads the downloaded human-judgment datasets and silnlp experiment outputs into the common data model."""
 
+import logging
 import re
 from pathlib import Path
 from typing import Iterator, List
@@ -8,6 +9,8 @@ import numpy as np
 import pandas as pd
 
 from .data import EvaluationSet, JudgedOutputs, SegmentJudgments
+
+LOGGER = logging.getLogger(__name__)
 
 
 class WmtMqmLoader:
@@ -80,6 +83,7 @@ class WmtDaLoader:
                         "human": group["score"].to_numpy(),
                     }
                 ),
+                *lp.split("-"),
             )
 
 
@@ -108,6 +112,7 @@ class AfriMteLoader:
                         "human": human,
                     }
                 ),
+                *lp.split("-"),
             )
 
     def _lines(self, path: Path) -> List[str]:
@@ -134,15 +139,26 @@ class ExperimentOutputsLoader:
             name=test_hash,
             source_language=str(first["src"]),
             target_language=str(first["trg"]),
-            sources=self._lines(directory / f"{first['prefix']}.src.detok.txt"),
+            sources=self._lines(self._source_path(directory, first["prefix"])),
             references=self._lines(directory / f"{first['prefix']}.trg.detok.txt"),
             segment_ids=self._lines(directory / f"{first['prefix']}.vref.txt"),
         )
         outputs = JudgedOutputs(evaluation_set)
         for row in rows.itertuples(index=False):
             path = self._root / row.experiment / f"{row.prefix}.trg-predictions.detok.txt.{row.step}"
-            outputs.add_system(f"{row.experiment}|{row.prefix}|{row.step}", self._lines(path))
+            hypotheses = self._lines(path)
+            # Outputs with extra line breaks or merged verses can't be aligned verse by verse; leaving them out
+            # keeps the test set's other outputs usable.
+            if len(hypotheses) != len(evaluation_set):
+                LOGGER.debug(f"{path}: {len(hypotheses)} lines for {len(evaluation_set)} verses; skipped")
+                continue
+            outputs.add_system(f"{row.experiment}|{row.prefix}|{row.step}", hypotheses)
         return outputs
+
+    def _source_path(self, directory: Path, prefix: str) -> Path:
+        # Older experiments only kept the tokenized source; it is still usable as the source text.
+        detokenized = directory / f"{prefix}.src.detok.txt"
+        return detokenized if detokenized.is_file() else directory / f"{prefix}.src.txt"
 
     def _lines(self, path: Path) -> List[str]:
         text = path.read_text(encoding="utf-8-sig").replace("\r\n", "\n")

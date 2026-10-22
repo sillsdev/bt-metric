@@ -27,4 +27,4 @@ def test_mean_chrf_averages_verse_scores_rather_than_pooling_ngrams():
 
 def test_registry_lists_every_baseline():
     assert FeatureRegistry().default_names() == ["chrf3", "chrf3++", "m-chrf3", "bleu", "spbleu"]
-    assert {"ter", "comet22", "africomet"} <= set(FeatureRegistry().names())
+    assert {"ter", "comet22", "africomet", "xcomet-xl"} <= set(FeatureRegistry().names())

@@ -13,10 +13,13 @@ from scipy.stats import kendalltau
 
 from ..evaluation.data import JudgedOutputs, SegmentJudgments
 from ..evaluation.loaders import AfriMteLoader, WmtDaLoader, WmtMqmLoader
+from ..features.alignment import AlignerCache, AlignmentCoverage
 from ..features.base import Feature
 from ..features.chrf import ChrF
 from ..features.comet import Comet
+from ..features.key_terms import InferredRenderings, KeyTermAccuracy
 from ..features.lexical import Bleu, MeanChrF, NegativeTer
+from ..features.naturalness import PerplexityRatio
 from .agreement import PairwiseAgreement
 
 LOGGER = logging.getLogger(__name__)
@@ -48,6 +51,7 @@ class SystemLevelEvaluator:
         for outputs in outputs_list:
             outputs = outputs.without_systems([s for s in outputs.systems() if self._is_excluded(s)])
             evaluation_set = outputs.evaluation_set
+            feature.prepare(evaluation_set.source_language, evaluation_set.target_language)
             systems = [system for system in outputs.systems() if system in outputs.human_scores]
             gold = [outputs.human_system_score(system) for system in systems]
             metric = [
@@ -103,6 +107,7 @@ class SegmentLevelEvaluator:
 
     def evaluate(self, judgments: SegmentJudgments, feature: Feature) -> MetaEvalResult:
         judgments = judgments.sample_items(self._max_items)
+        feature.prepare(judgments.source_language, judgments.target_language)
         metric = feature.segment_scores(
             judgments.column("source"), judgments.column("hypothesis"), judgments.column("reference")
         )
@@ -153,6 +158,9 @@ class FeatureRegistry:
     """Features by name, built on first use: some load models or download tokenizers when constructed."""
 
     def __init__(self) -> None:
+        # Shared so that related features train each language's models once between them.
+        self._aligners = AlignerCache()
+        self._renderings = InferredRenderings()
         self._factories: Dict[str, Callable[[], Feature]] = {
             "chrf3": lambda: ChrF(0),
             "chrf3++": lambda: ChrF(2),
@@ -162,10 +170,28 @@ class FeatureRegistry:
             "ter": NegativeTer,
             "comet22": lambda: Comet("COMET-22", "Unbabel/wmt22-comet-da"),
             "africomet": lambda: Comet("AfriCOMET", "masakhane/africomet-stl-1.1"),
+            # Gated on Hugging Face. XXL is left out: COMET loads models in fp32, and 10.7B parameters need ~43 GB.
+            "xcomet-xl": lambda: Comet("xCOMET-XL", "Unbabel/XCOMET-XL", batch_size=16),
+            "coverage-source": lambda: AlignmentCoverage("source", aligners=self._aligners),
+            "coverage-target": lambda: AlignmentCoverage("target", aligners=self._aligners),
+            "key-terms": lambda: KeyTermAccuracy(renderings=self._renderings),
+            "key-terms-names": lambda: KeyTermAccuracy(categories=frozenset({"PN"}), renderings=self._renderings),
+            "perplexity": PerplexityRatio,
         }
-        # Run only when asked for: neural features need a GPU, and sacrebleu's TER is pure Python and takes over an
-        # hour on the WMT sets while ranking almost exactly like chrF and BLEU.
-        self._opt_in = {"ter", "comet22", "africomet"}
+        # Run only when asked for: neural features need a GPU; sacrebleu's TER is pure Python and takes over an hour
+        # on the WMT sets while ranking almost exactly like chrF and BLEU; coverage trains an aligner per language
+        # pair from Bible text on the mounted bucket.
+        self._opt_in = {
+            "ter",
+            "comet22",
+            "africomet",
+            "xcomet-xl",
+            "coverage-source",
+            "coverage-target",
+            "key-terms",
+            "key-terms-names",
+            "perplexity",
+        }
 
     def names(self) -> List[str]:
         return list(self._factories)

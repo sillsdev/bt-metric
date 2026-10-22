@@ -164,3 +164,30 @@ def test_results_file_replaces_rows_of_rerun_features(tmp_path: Path):
     ResultsFile(path).merge(pd.DataFrame({"feature": ["chrF3", "BLEU"], "value": [0.1, 0.2]}))
     table = ResultsFile(path).merge(pd.DataFrame({"feature": ["chrF3"], "value": [0.9]}))
     assert sorted(zip(table["feature"], table["value"])) == [("BLEU", 0.2), ("chrF3", 0.9)]
+
+
+def test_experiment_outputs_loader_skips_outputs_that_cannot_be_aligned(tmp_path: Path):
+    directory = tmp_path / "exp"
+    directory.mkdir()
+    for name, text in [
+        ("test.vref.txt", "MAT 1:1\nMAT 1:2\n"),
+        ("test.src.detok.txt", "s1\ns2\n"),
+        ("test.trg.detok.txt", "r1\nr2\n"),
+        ("test.trg-predictions.detok.txt.1000", "p1\np2\n"),
+        ("test.trg-predictions.detok.txt.2000", "p1\nextra line\np2\n"),
+    ]:
+        (directory / name).write_text(text, encoding="utf-8")
+    rows = [
+        {
+            "experiment": "exp",
+            "prefix": "test",
+            "step": step,
+            "test_hash": "h",
+            "prediction_hash": step,
+            "src": "en",
+            "trg": "xx",
+        }
+        for step in ("1000", "2000")
+    ]
+    outputs = ExperimentOutputsLoader(tmp_path, pd.DataFrame(rows)).outputs_for("h")
+    assert outputs.systems() == ["exp|test|1000"]

@@ -54,7 +54,10 @@ class EvaluationLanguages:
         return cls(pd.read_csv(Path(__file__).with_name("evaluation_languages.tsv"), sep="\t"))
 
     def language_of(self, extract_path: Path) -> Optional[str]:
-        code = extract_path.stem.split("-", 1)[0]
+        return self.language_for_code(extract_path.stem.split("-", 1)[0])
+
+    def language_for_code(self, code: str) -> Optional[str]:
+        """The test-set language an ISO code (two- or three-letter, or a variant such as "pbt") belongs to."""
         return next((language for language, codes in self._codes.items() if code in codes), None)
 
     def languages(self) -> List[str]:

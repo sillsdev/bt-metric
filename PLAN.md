@@ -44,7 +44,7 @@ score(hyp, ref, src) = Σ_i w_i · norm_L(f_i(hyp, ref, src))
 | Criterion | Feature | Description | Status |
 |---|---|---|---|
 | Accuracy | **chrF3** (and chrF3++) | Character n-gram F-score against the reference, recall-weighted (β = 3) as in silnlp | Core (anchor and baseline) |
-| Accuracy | **Key term accuracy** | For each Biblical Term occurring in the verse, check whether the hypothesis contains the project's rendering (Paratext renderings) or the reference's rendering (found by aligning source to reference). Use stem or fuzzy matching to handle morphology. | Core |
+| Accuracy | **Key term accuracy** | For each Biblical Term occurring in the verse, check whether the hypothesis contains the rendering the project uses. Most projects have no curated renderings, so they are **inferred by word alignment** (§2.2.1). Curated Paratext renderings, where they exist, serve to validate the inference. Use stem or fuzzy matching to handle morphology. | Core |
 | Accuracy | **Alignment coverage** | Align hypothesis to reference and to source (eflomal / fast_align). Unaligned-source rate signals omissions; unaligned-hypothesis rate signals additions. | Core |
 | Accuracy / Clarity | **Back-translation features** | Give credit for valid paraphrases that chrF misses. Several options with different costs and memorization risk (§2.3). | Must justify its cost in ablations |
 | Naturalness | **Perplexity ratio** | Character-level LM perplexity of the hypothesis divided by that of the reference on the same verses. Use a two-sided penalty, because degenerate output (repetitive, generic) can get *lower* perplexity than human text. | Core |
@@ -52,11 +52,68 @@ score(hyp, ref, src) = Σ_i w_i · norm_L(f_i(hyp, ref, src))
 | Accuracy | **Edit distance** (TER / charTER) | Likely to duplicate chrF; keep only if ablations show it adds signal | Probation |
 | — | MT model confidence | Dropped. It can't be compared across systems with different vocabularies, and each system is biased toward its own output. It remains useful for quality estimation (`quality_estimation.py`), which is a different task. | Dropped |
 
+#### 2.2.1 Inferring key term renderings by alignment
+
+Most projects have no Biblical Terms renderings, so the key term feature and the key-term perturbations (§3.3a) infer them from the parallel corpus:
+
+1. **Locate each term in English.** The Major Biblical Terms list gives every verse a term occurs in. silnlp's gloss files (`en-Major-glosses.txt`, also fr, es, id, pt) locate it in an English Bible verse such as BSB. This doesn't depend on the source text of any MT system.
+2. **Word-align English with the target** over the project's whole corpus, excluding test verses, with **eflomal**, which has worked best in the team's experience. Use the Thot implementation in `sil-machine[thot]` (`ThotEflomalWordAlignmentModel`, the same model as silnlp's `eflomal` aligner) with symmetrized alignments. It runs on Windows: a symmetrized model trained on 7,908 NT verses (English BSB → a minority language) in 14 seconds, with sensible alignments for names and terms. The standalone `eflomal` package needs a Unix build toolchain.
+3. **Infer the rendering.** For each term, collect the target words aligned to its gloss in all of its verses. The most frequent word or phrase, matched at stem level to handle morphology, is the inferred rendering. The share of the term's verses it appears in is its confidence.
+4. **Validate.** On the ~1,100 projects with curated Major renderings in `MT/terms`, measure precision and recall of inferred renderings by term category. That shows which categories (e.g. proper names vs. abstract terms) can be trusted.
+
+**Validation results** (`btmetric-validate-rendering-inference`, October 2026). 30 projects, one per language, with curated renderings and a near-complete NT; English BSB aligned with each extract by symmetrized Thot eflomal.
+
+| | Precision | Recall |
+|---|---|---|
+| All terms (29 projects, ~20,000 terms) | **0.68** | 0.67 |
+| Proper names (69% of terms) | **0.76** (0.84 at confidence > 0.75) | |
+| Other categories (AT, RE, BE, FA, MI, RI, FL) | 0.39–0.57 | |
+
+| Confidence threshold | Precision | Inferred terms kept |
+|---|---|---|
+| ≥ 0.5 | 0.73 | 85% |
+| ≥ 0.6 | 0.77 | 75% |
+| ≥ 0.75 | 0.77 | 68% |
+
+- **These are lower bounds.** Curated lists often record only some inflected forms, and matching accepts only shared-prefix variants.
+- **Proper names are reliable.** Other categories need better matching (stem grouping of aligned words, multi-word renderings) before the key-term feature relies on them; a higher confidence threshold barely helps them.
+- **Corpus size matters somewhat** (correlation 0.32 with verse count): projects under ~8,000 verses mostly score 0.37–0.53.
+- **Threshold.** The challenge set and the key term features use inferred renderings with confidence ≥ 0.6, after the specificity filter of §2.2.2.
+- **Data problems found:** `xyz-XYZ_2026_03_18` is mis-encoded (skipped automatically), and the `bi-ABC_2026_02_16` extract is English text under a Bislama code. Projects with only one or two comparable terms give meaningless per-project precision, but carry no weight in the pooled figures.
+
 **Constraints on auxiliary models.** To match real minority-language conditions:
 
 - The LM, aligner and back-translation model are trained **only on the Bible corpus** for that language.
 - They are **not trained on the test data**. Many past experiments test on a random sample of 250 verses rather than whole held-out books (§6.2), so exclude those exact verses. For the strictest setting, also exclude whole chapters, because neighbouring verses share wording.
 - They are **independent of every MT system being compared**.
+
+#### 2.2.2 Phase 4 status
+
+**Implemented** (`btmetric/features`). Each feature is prepared per language pair, and models trained on Scripture leave out the verses being scored:
+
+- **`coverage-source`, `coverage-target`.** A symmetrized Thot eflomal aligner is trained on the pair's Bible text only. Each source (target) token counts by the best translation probability among its alignments; the score is the hypothesis's coverage minus the reference's.
+  - Counting a token as covered whenever it is aligned at all let untranslated copies of the source look well covered, because the aligner aligns copied words anyway. Weighting by translation probability is the default; the binary version is kept as an option.
+  - The two sides share one aligner per language pair.
+- **`key-terms`, `key-terms-names`.** The share of the reference's key term renderings the hypothesis also uses. Renderings are inferred (§2.2.1, confidence ≥ 0.6), and matching tolerates suffixes by length: none for renderings of 3 letters or fewer, 2 for 4–5 letters, 3 for longer ones. Verses whose reference has no key term get no score. The two features share one set of inferred renderings.
+- **`perplexity`.** The two-sided distance between hypothesis and reference per-character log-perplexity, under a Witten-Bell character 5-gram model of the target Bible. It trains in about 6 seconds per Bible.
+
+**Rendering specificity filter.** Alignment sometimes infers function words as renderings, e.g. Swahili *yake* "his" or *wala* "nor". Three filters were tried against the curated renderings; recall is measured against the same set of findable terms throughout:
+
+| Filter | Precision | Recall | Names | Other terms |
+|---|---|---|---|---|
+| none | 0.683 | 0.667 | 0.796 | 0.463 |
+| rendering in ≤ 2× as many verses as its term | 0.717 | 0.459 | 0.812 | 0.427 |
+| ≥ 20% of the rendering's verses are its term's | 0.707 | 0.483 | 0.802 | 0.452 |
+| **same, counting namesakes' verses (used)** | **0.729** | 0.622 | **0.820** | **0.495** |
+
+The first two filters lose about a third of the correct renderings for a small precision gain. Most of the lost ones are rare proper names. The Major list treats namesakes (John the Baptist, John the apostle) as separate terms sharing one rendering, so that rendering looks unspecific to each of them. The filter now compares a rendering's verses with those of every term inferred with that rendering.
+
+At the features' confidence threshold of 0.6, it raises precision from 0.766 to **0.803** and lowers recall only from 0.559 to 0.534.
+
+**Fixes found while evaluating:**
+
+- *Extract names.* Experiment configs don't always name an extract as it is stored: some add a suffix (`qac-ABCD-QAC` is `qac-ABCD.txt`), and many extracts are dated. The lookup now tries the exact name, its dated versions, and the name with trailing segments removed, before falling back to the language's selected corpus.
+- *Missing scores.* The challenge-set evaluation counted a row with no feature score as a failure. Such rows are now left out, and the number of scored rows is reported. Feature results computed before this fix are superseded.
 
 ### 2.3 Back-translation: options, cost and memorization
 
@@ -185,6 +242,43 @@ Then:
 - Perturbation frequencies should roughly match real MT error distributions, e.g. by harvesting omissions and mistranslations from weak MT outputs via alignment.
 - silnlp's `add_noise_to_corpus.py` (random deletion, replacement, permutation) is a starting point. Most of the suite needs errors that change meaning rather than random token noise.
 
+**Phase 3 status** (October 2026; `btmetric/perturbations`, `btmetric/terms`):
+
+- **Perturbations.** All work in any script, including ones without spaces between words:
+  - clause omission, addition (a clause from a nearby verse), word-order shuffle, wrong verse (a nearby verse), source copy, repetition, truncation
+  - key-term substitution (another term of the same kind, e.g. one person's name for another)
+  - negation removal, using negation words inferred by alignment: target words aligned to English *not/no/never/…* in at least half their occurrences. Languages that negate with affixes yield no markers.
+- **Challenge set.** `btmetric-build-challenge-set` applies every perturbation to a randomly chosen real MT output per test set: 60 held-out-book test sets, one per target language, 100 verses each. Key terms are curated where available and otherwise inferred (§2.2.1). Test verses are excluded from the alignment. `--perturb-reference` perturbs the human reference instead, for the memorization gate.
+- **First results.** Share of verses where the metric prefers the unperturbed output; 38,714 rows, built before inferred key terms and negation were added:
+
+  | Perturbation | chrF3 | BLEU | spBLEU |
+  |---|---|---|---|
+  | addition | **0.49** | 0.86 | 0.88 |
+  | repetition | **0.72** | 0.93 | 0.95 |
+  | omission | 0.98 | 0.80 | 0.87 |
+  | key term | 0.93 | 0.75 | 0.88 |
+  | word order | 0.94 | 0.82 | 0.89 |
+  | truncation | 1.00 | 0.91 | 0.96 |
+  | source copy | 0.98 | 0.95 | 0.98 |
+  | wrong verse | 0.98 | 0.95 | 0.98 |
+
+  chrF3's recall weighting (beta = 3) makes added content almost free: it is at chance on additions.
+- **Calibration against real MT errors.** `btmetric-measure-error-rates` covers 210 outputs from 58 held-out-book test sets. Share of verses with each signature (mean / median):
+
+  | Signature | Mean | Median |
+  |---|---|---|
+  | output > 150% of reference length (addition) | 3.4% | 1.5% |
+  | source copy (concentrated in a few test sets) | 2.3% | 0% |
+  | back-to-back repeated spans (decoder loops) | 1.4% | 1.0% |
+  | output < 60% of reference length (omission or truncation) | 1.6% | 0.7% |
+
+  Repeated n-grams anywhere in the verse occur in 6.2% of verses, but a spot check found about a third of those are legitimate parallelism, so the back-to-back count is the calibrated one. Weighting accuracy by these rates gives spBLEU 0.92, BLEU 0.90 and **chrF3 0.75**: on the error mix real outputs show, chrF3 does worst of the lexical baselines. Over-long output isn't always an addition, so the addition weight is an upper bound.
+- **Data quality.** Some extracts are mis-encoded on the bucket (UTF-8 decoded as cp1252, e.g. `xyz-XYZ_2026_03_18`). Rendering validation detects and skips them; they should be reported and re-extracted.
+- **Still to do:**
+  - rebuild the challenge set with inferred key terms and negation
+  - evaluate the neural baselines on it
+  - check that each sub-score responds to its own error types, once the features exist (Phase 4)
+
 **b. Test using other human translations.** Many languages, especially major ones, have more than one Bible translation. `MT/scripture` has about 674 English, 111 French and 103 Spanish extracts, including many published versions (BSB, CEV, ESV, GNT, KJV, NASB, NIV, NLT, NRSV, …), with a range from literal to dynamic.
 
 - **Paraphrase robustness:** a different valid human translation scored against the reference should score well and beat MT output. chrF often fails this, which makes it a strong argument for the new metric.
@@ -245,6 +339,27 @@ Run on every evaluation above:
 | BLEU | 0.718 (0.688–0.749) | 0.41–0.44 | 0.176 |
 
 COMET-22 was trained on WMT 2017–20 direct-assessment data, so its scores on those years are inflated; compare it on WMT 2021–22 and AfriMTE. The lexical metrics are statistically indistinguishable from one another at system level.
+
+*Baselines on real minority-language system pairs* (`btmetric-score-system-pairs`). All 49,525 usable config pairs from past silnlp experiments; no human labels.
+
+| | chrF3 | m-chrF3 | BLEU | spBLEU |
+|---|---|---|---|---|
+| chrF3 | — | 0.96 | **0.87** | 0.92 |
+| BLEU | 0.87 | 0.88 | — | 0.92 |
+
+- **Choice of metric changes decisions.** chrF3 and BLEU pick different winners on 12.7% of real system comparisons, and chrF3 and spBLEU on 8.5%.
+- **Many differences are not significant** (paired t-test on verse-level chrF3, p < 0.05):
+
+  | Test set | Pairs | Significant |
+  |---|---|---|
+  | ≤ 100 verses | 940 | 36% |
+  | 101–250 verses (the usual random test set) | 37,142 | 61% |
+  | 1,000–5,000 verses | 6,395 | 84% |
+  | > 5,000 verses | 1,303 | 81% |
+  | held-out books (any size) | 9,411 | 77% |
+  | random verses (any size) | 39,984 | 60% |
+
+  So at the standard 250-verse random test size, about 40% of system comparisons can't be told apart. That makes significance reporting (§5) essential and argues for larger held-out-book test sets.
 
 *Failure mode: valid human translations are scored below MT* (§3.3b).
 
@@ -347,7 +462,7 @@ Research code lives in this repository and uses silnlp as a library. The final m
 | Plan component | silnlp starting point | Gap |
 |---|---|---|
 | Baselines, scoring per book and per verse | `silnlp/nmt/test.py` (BLEU, chrF3/+/++, spBLEU, m-chrF, TER; multiple references) | Final metric added as a new scorer |
-| Key term accuracy | Major Biblical Terms assets (`Major-metadata`, `Major-vrefs`, en/fr glosses); project renderings in `MT/terms`; preliminary proper-noun work in `scripts/IDQ/key_terms.ipynb` | Matching that copes with morphology; all term categories, not just proper nouns |
+| Key term accuracy | Major Biblical Terms assets (`Major-metadata`, `Major-vrefs`, en/fr/es/id/pt glosses); curated renderings in `MT/terms` for ~1,100 projects; Thot aligners in `silnlp/alignment/machine_aligner.py`; preliminary proper-noun work in `scripts/IDQ/key_terms.ipynb` | Rendering inference by alignment (§2.2.1) for projects without renderings; matching that copes with morphology |
 | Alignment coverage | `silnlp/alignment/utils.py` `compute_alignment_scores` (eflomal, fast_align; symmetrized alignment output) | Coverage features; tokenization beyond `LatinWordTokenizer` for scripts that don't separate words with spaces |
 | Back-translation by LLM with in-context examples | `remote_llm_config.py`, `local_llm_config.py`, `example_retrieval.py` (TF-IDF, embedding and coverage-aware selection), response caching | Reverse-direction experiment configs; memorization gate |
 | Back-translation scoring | Model loading and `compute_transition_scores` in `seq2seq_config.py` / `local_llm_config.py` (scores the model's own output only) | Scoring of given text, plus the memorized-prior term `P(src \| ∅)` |
@@ -437,7 +552,7 @@ Each experiment directory typically contains:
 - **What the claim is:** the evidence shows the metric tracks human judgment under simulated low-resource conditions and behaves correctly on Bible text. It doesn't directly show correlation with consultant judgments on minority-language Scripture. Phase 10 would close most of that gap.
 - **Memorization:** pretrained models have memorized Bibles in major languages. This affects back-translation features, forward systems in the simulation, and silver judges. Back-translation features have to pass the memorization gate.
 - **Bias in the silver labels:** MetricX, xCOMET and LLM judges have their own biases; use agreement across several of them.
-- **Key term coverage:** depends on the availability and quality of Biblical Terms renderings for each project.
+- **Key term coverage:** most projects have no curated renderings, so the feature depends on how accurately alignment infers them, which varies by term category and corpus size. §2.2.1's validation against curated renderings measures this.
 - **Goodhart effects:** if the metric drives system selection, systems may overfit to its features. Keep the perturbation suite and the human-translation test as regression checks.
 - **Compute scheduling:** only one remote ClearML job at a time, so large training sweeps take longer.
 - **Test-set design in past experiments:** random 250-verse test sets give optimistic scores and limited statistical power, and they complicate keeping test data out of auxiliary-model training.
@@ -446,7 +561,7 @@ Each experiment directory typically contains:
 
 ## 9. Open Questions
 
-- How complete are Biblical Terms renderings across projects, and which term categories are reliably filled in?
+- How accurately does alignment infer key term renderings, by term category and corpus size, compared with curated renderings?
 - Which of the ~336 `en-*BT*` extracts are human back-translations, and of which vernacular projects? Project metadata is needed to pair them reliably.
 - Are there minority languages with more than one Scripture translation that could serve as additional human-translation tests?
 - What computing budget is available for training Bible-only auxiliary models across many test-set languages?

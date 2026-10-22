@@ -11,6 +11,7 @@ dependencies = [
     "sacrebleu>=2.6,<3",
     "scipy>=1.11.2,<2",
     "sentencepiece>=0.2.0,<0.3",
+    "sil-machine[thot]==1.9.2",
 ]
 
 [project.scripts]
@@ -22,6 +23,13 @@ btmetric-download-datasets = "btmetric.datasets.download:main"
 btmetric-find-bible-corpora = "btmetric.scripture.corpora:main"
 btmetric-meta-evaluate = "btmetric.meta_eval.runner:main"
 btmetric-test-human-translations = "btmetric.analysis.human_translations:main"
+btmetric-score-system-pairs = "btmetric.analysis.system_pairs:main"
+btmetric-build-challenge-set = "btmetric.perturbations.challenge_set:build_main"
+btmetric-evaluate-challenge-set = "btmetric.perturbations.challenge_set:evaluate_main"
+btmetric-validate-rendering-inference = "btmetric.terms.validate:main"
+btmetric-measure-error-rates = "btmetric.perturbations.calibration:main"
+btmetric-build-natural-errors = "btmetric.perturbations.natural_errors:main"
+btmetric-fit-combination = "btmetric.combination.challenge:main"
 
 [dependency-groups]
 dev = [

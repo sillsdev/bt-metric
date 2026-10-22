@@ -33,11 +33,13 @@ class SegmentJudgments:
     each other directly. Scores are higher-is-better.
     """
 
-    def __init__(self, name: str, table: pd.DataFrame) -> None:
+    def __init__(self, name: str, table: pd.DataFrame, source_language: str = "", target_language: str = "") -> None:
         missing = {"item", "source", "hypothesis", "reference", "human"} - set(table.columns)
         if missing:
             raise ValueError(f"{name}: segment judgments are missing columns {sorted(missing)}.")
         self.name = name
+        self.source_language = source_language
+        self.target_language = target_language
         self._table = table.reset_index(drop=True)
 
     def __len__(self) -> int:
@@ -58,7 +60,9 @@ class SegmentJudgments:
         if len(items) <= max_items:
             return self
         chosen = np.random.default_rng(seed).choice(items, size=max_items, replace=False)
-        return SegmentJudgments(self.name, self._table[self._table["item"].isin(chosen)])
+        return SegmentJudgments(
+            self.name, self._table[self._table["item"].isin(chosen)], self.source_language, self.target_language
+        )
 
 
 @dataclass
@@ -110,4 +114,9 @@ class JudgedOutputs:
             for i, hypothesis in enumerate(self.hypotheses[system])
         ]
         table = pd.DataFrame(rows, columns=["item", "source", "hypothesis", "reference", "human"])
-        return SegmentJudgments(self.evaluation_set.name, table.dropna(subset=["human"]))
+        return SegmentJudgments(
+            self.evaluation_set.name,
+            table.dropna(subset=["human"]),
+            self.evaluation_set.source_language,
+            self.evaluation_set.target_language,
+        )
