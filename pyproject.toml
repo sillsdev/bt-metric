@@ -14,6 +14,8 @@ dependencies = [
 [project.scripts]
 btmetric-index-experiments = "btmetric.experiments.index:main"
 btmetric-find-system-pairs = "btmetric.experiments.pairs:main"
+btmetric-pair-back-translations = "btmetric.scripture.back_translations:main"
+btmetric-download-datasets = "btmetric.datasets.download:main"
 
 [dependency-groups]
 dev = [

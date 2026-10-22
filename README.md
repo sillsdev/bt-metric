@@ -25,9 +25,27 @@ Find the pairs of distinct outputs scored on the identical test set (same verses
 uv run btmetric-find-system-pairs --index data/experiments.tsv --output data/system_pairs.tsv
 ```
 
-Generated files go in `data/`, which is not committed.
+## Human back translations
+
+Pair each human back translation extract in `MT/scripture` with an extract of the vernacular project it translates, using the base project recorded in each Paratext project's `Settings.xml`:
+
+```
+uv run btmetric-pair-back-translations --projects M:/Paratext/projects --scripture M:/MT/scripture
+```
+
+## Public human-judgment datasets
+
+Download WMT MQM, WMT DA and AfriMTE into `data/external/`:
+
+```
+uv run btmetric-download-datasets
+```
+
+Generated and downloaded files go in `data/`, which is not committed.
 
 ## Layout
 
 - `btmetric/experiments`: indexing past silnlp experiments and finding system pairs
+- `btmetric/scripture`: Scripture extracts and Paratext project metadata (back translation pairing)
+- `btmetric/datasets`: downloading public human-judgment datasets
 - `btmetric/meta_eval`: meta-evaluation statistics (pairwise accuracy, acc_eq with tie calibration, bootstrap intervals, paired bootstrap significance)

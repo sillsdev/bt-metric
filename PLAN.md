@@ -121,7 +121,18 @@ Use sets that have references, multiple systems and human judgments:
 | **IndicMT-Eval** | 5 Indic languages, several systems | MQM | System-level checks for morphologically rich languages |
 | **MLQE-PE** | Includes si-en, ne-en | DA + post-edits | Additional low-resource segment-level data |
 
-> These details are from memory. Check exact language coverage, number of systems and licensing before relying on any set.
+**What has been checked so far (Phase 1):** `btmetric-download-datasets` downloads these into `data/external/`.
+
+| Source | Contents | Supports |
+|---|---|---|
+| `RicardoRei/wmt-mqm-human-evaluation` (Hugging Face) | MQM 2020–2022: en-de, zh-en (2020–22), en-ru (2021–22); 10–17 systems per test set; source, MT output, reference, score, system | System and segment level, high-resource only |
+| `RicardoRei/wmt-da-human-evaluation` (Hugging Face) | DA 2017–2022, 87 year × language-pair sets, including gu, kk, km, ps, ta, ha, is, xh–zu, bn–hi, lt, lv, et | **Segment level only**: there is no system column |
+| AfriMTE-ade-devtest-v2 (`masakhane-io/africomet`, WMT 2024 challenge set) | 13 African language pairs with source, reference and human scores | **Segment level only**: one MT system per pair |
+| `google/wmt-mqm-human-evaluation` (GitHub) | MQM for generalMT 2022–2024 (adds en-es, ja-zh, …) | Not downloaded yet; check whether references are included |
+| IndicMT-Eval | MQM for 5 Indic languages, 7 systems | Data is only shared as a Google Sheet; not downloaded yet |
+| mt-metrics-eval (`mt-metrics-eval-v2.tgz`) | Full WMT data with system outputs and human scores per system | The Google Cloud archive refused anonymous downloads (403) in October 2026; needs another route |
+
+**Gap:** none of the downloaded sets supports **system-level** evaluation in a lower-resource language. DA data with system names, from mt-metrics-eval or the WMT findings repositories, or IndicMT-Eval's 7 systems, would fill it. Until then, system-level evidence for lower-resource languages comes from the Bible-domain tests (§3.3).
 
 **Mapping MQM categories to criteria** gives a separate human label for each sub-score:
 
