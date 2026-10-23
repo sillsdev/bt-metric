@@ -191,6 +191,24 @@ uv run btmetric-silver-agreement agree                                   # pairw
 
 `xcomet-xl-qe` is xCOMET-XL without the reference, so its labels don't share the reference the metric scores against.
 
+## Field-test judgments
+
+Translation teams judged Scripture Forge drafts in the 2025 field tests: usability, comparisons of two models' drafts, and corrections. Export the two Google Drive folders as .xlsx with a read-only rclone remote (create it once with `rclone config create gdrive drive scope=drive.readonly`):
+
+```
+rclone copy gdrive: data/external/field_tests/nt_field_test --drive-root-folder-id <folder id> --drive-export-formats xlsx
+rclone copy gdrive: data/external/field_tests/trial_2 --drive-root-folder-id <folder id> --drive-export-formats xlsx
+```
+
+Collect every judged verse into one table, with references from each team's project (`btmetric/datasets/field_test_teams.tsv`) and whether each reference predates the trial's drafts. Then score features and measure how often they side with the teams:
+
+```
+uv run btmetric-collect-field-tests
+uv run btmetric-field-test-agreement build
+uv run btmetric-field-test-agreement score --features chrf3 coverage-source coverage-target
+uv run btmetric-field-test-agreement agree
+```
+
 ## Significance thresholds
 
 How large a system-level difference must be before humans reliably agree with its direction, from the WMT MQM system pairs:
@@ -217,12 +235,12 @@ Generated and downloaded files go in `data/`, which is not committed.
 
 - `btmetric/experiments`: indexing past silnlp experiments, finding system pairs and how much they differ
 - `btmetric/scripture`: Scripture extracts and Paratext project metadata (back translation pairing, Bible corpora)
-- `btmetric/datasets`: downloading public human-judgment datasets
+- `btmetric/datasets`: downloading public human-judgment datasets, and collecting the field-test judgments
 - `btmetric/evaluation`: the common data model (evaluation sets, system outputs, human judgments) and its loaders
 - `btmetric/features`: the `Feature` interface, the baselines (chrF, BLEU, TER, COMET), the metric features (alignment coverage, key terms, perplexity, back-translation scoring), reverse models, and the in-domain training corpora
 - `btmetric/terms`: Major Biblical Terms, rendering and negation-word inference by alignment, and its validation
 - `btmetric/perturbations`: the perturbation library, challenge sets (synthetic and real errors) and calibration against real error rates
 - `btmetric/combination`: the pairwise log-linear combination, fit on challenge-set rows or WMT human judgments
-- `btmetric/analysis`: failure-mode checks (other human translations, MQM error categories, the memorization gate), baselines on past system pairs, silver-label agreement and significance thresholds
+- `btmetric/analysis`: failure-mode checks (other human translations, MQM error categories, the memorization gate), baselines on past system pairs, silver-label and field-test agreement, and significance thresholds
 - `btmetric/meta_eval`: meta-evaluation statistics (pairwise accuracy, acc_eq with tie calibration, bootstrap intervals, paired bootstrap significance) and the runner
 - `tools/comet`: the separate environment and worker process for COMET models

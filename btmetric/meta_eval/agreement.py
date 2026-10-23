@@ -34,6 +34,16 @@ class PairwiseAgreement:
         i, j = np.triu_indices(len(gold), k=1)
         return cls(gold[i] - gold[j], metric[i] - metric[j])
 
+    @classmethod
+    def pooled(cls, agreements: Sequence["PairwiseAgreement"]) -> "PairwiseAgreement":
+        """The pairs of several agreements together, e.g. pairs formed within each of several groups."""
+        if not agreements:
+            return cls([], [])
+        return cls(np.concatenate([a._gold for a in agreements]), np.concatenate([a._metric for a in agreements]))
+
+    def __len__(self) -> int:
+        return len(self._gold)
+
     def accuracy(self) -> float:
         """Pairwise accuracy (Kocmi et al. 2021): pairs with a gold tie are skipped, metric ties count as wrong."""
         decided = self._gold != 0

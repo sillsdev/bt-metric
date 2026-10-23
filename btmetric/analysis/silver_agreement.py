@@ -16,6 +16,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+from ..datasets.field_tests import expand_vref
 from ..evaluation.loaders import ExperimentOutputsLoader
 from ..meta_eval.agreement import PairwiseAgreement
 from ..meta_eval.runner import FeatureRegistry
@@ -71,7 +72,12 @@ class SilverTable:
             if len(outputs.systems()) < 2:
                 continue
             evaluation_set = outputs.evaluation_set
-            indices = [i for i, reference in enumerate(evaluation_set.references) if reference.strip()]
+            # Some test sets mix in non-Scripture segments (e.g. CCMatrix), which have no verse reference.
+            indices = [
+                i
+                for i, (reference, vref) in enumerate(zip(evaluation_set.references, evaluation_set.segment_ids))
+                if reference.strip() and vref
+            ]
             if len(indices) > verses_per_set:
                 indices = sorted(rng.choice(indices, size=verses_per_set, replace=False))
             first = rows.iloc[0]
@@ -111,7 +117,8 @@ class SilverTable:
                     LOGGER.info(f"{feature.name}: test set {k}/{len(groups)} ({test_hash}, {len(part):,} rows)")
                     first = part.iloc[0]
                     # Scripture-trained models leave out the verses about to be scored.
-                    feature.prepare(first["source_extract"], first["target_extract"], frozenset(part["vref"]))
+                    excluded = frozenset(v for vref in part["vref"] for v in expand_vref(vref))
+                    feature.prepare(first["source_extract"], first["target_extract"], excluded)
                     scores[rows] = feature.segment_scores(
                         part["source"].tolist(), part["hypothesis"].tolist(), part["reference"].tolist()
                     )
@@ -127,7 +134,8 @@ class SilverTable:
         # Empty cells are missing scores, but in the text columns they are empty outputs, which must stay strings.
         text_columns = ["source", "hypothesis", "reference"]
         table[text_columns] = table[text_columns].fillna("").astype(str)
-        return table
+        # Rows without a verse reference are non-Scripture segments that older selections let in.
+        return table[table["vref"].notna()].reset_index(drop=True)
 
     def _save(self, table: pd.DataFrame) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)

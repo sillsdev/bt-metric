@@ -6,6 +6,7 @@ authors = [{ name = "SIL International" }]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy>=2.2.6,<3.0.0",
+    "openpyxl>=3.1.5",
     "pandas>=2.2,<3",
     "pyyaml>=6.0,<7",
     "sacrebleu>=2.6,<3",
@@ -20,6 +21,7 @@ btmetric-find-system-pairs = "btmetric.experiments.pairs:main"
 btmetric-measure-pair-differences = "btmetric.experiments.similarity:main"
 btmetric-pair-back-translations = "btmetric.scripture.back_translations:main"
 btmetric-download-datasets = "btmetric.datasets.download:main"
+btmetric-collect-field-tests = "btmetric.datasets.field_tests:main"
 btmetric-find-bible-corpora = "btmetric.scripture.corpora:main"
 btmetric-meta-evaluate = "btmetric.meta_eval.runner:main"
 btmetric-test-human-translations = "btmetric.analysis.human_translations:main"
@@ -34,6 +36,7 @@ btmetric-fit-combination-human = "btmetric.combination.human:main"
 btmetric-check-mqm-error-categories = "btmetric.analysis.mqm_error_categories:main"
 btmetric-memorization-gate = "btmetric.analysis.memorization_gate:main"
 btmetric-silver-agreement = "btmetric.analysis.silver_agreement:main"
+btmetric-field-test-agreement = "btmetric.analysis.field_test_agreement:main"
 btmetric-significance-thresholds = "btmetric.analysis.significance:main"
 
 [dependency-groups]

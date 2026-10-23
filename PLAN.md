@@ -14,7 +14,7 @@ The metric should:
 
 - **Reference-based.** A held-out human translation is always available.
 - **System comparison is the main use case.** The headline target is system-level pairwise accuracy: does the metric agree with humans on which of two systems is better? Segment-level correlation comes second.
-- **No new human evaluations.** Little human usability data exists today; `sample_usability.py` is mostly unused. Validation uses existing human judgments, simulation, and tests that need no human judgments. A small human study at the end is optional and nothing depends on it.
+- **No new human evaluations.** Little human usability data exists today; `sample_usability.py` is mostly unused. Validation uses existing human judgments, simulation, and tests that need no human judgments. A small human study at the end is optional and nothing depends on it. The 2025 Scripture Forge field tests turned out to hold real judgments of drafts in minority languages (§3.3g), the closest thing to that study.
 
 ### Limitations of chrF3 this should address
 
@@ -493,6 +493,17 @@ Then test whether the metric, computed under low-resource constraints, reproduce
 - Prefer **target languages less likely to be memorized** (mid-resource languages, AfriMTE and Indic languages), while remembering that NLLB saw Bible data for many lower-resource languages too.
 - Use several silver judges, and check whether they agree more on outputs that are word-for-word close to known Bible versions. That would be a sign of memorization.
 
+**Status (October 2026).** xCOMET-XL and xCOMET-XL-QE scored 129,467 rows: up to 300 verses with every system's output, from past test sets whose source and target are both XLM-R languages (non-Scripture segments that some sets mix in, such as CCMatrix, are left out). Pairwise agreement with xCOMET-XL (`btmetric-silver-agreement`):
+
+| Metric | Two systems, same verse | System level (95% CI) |
+|---|---|---|
+| chrF3 (m-chrF3 identical) | 0.623 | 0.743 (0.72–0.77) |
+| spBLEU | 0.608 | 0.740 |
+| BLEU | 0.570 | 0.734 |
+| perplexity-one-sided | 0.408 | 0.560 |
+
+Against the reference-free xCOMET-XL-QE every metric drops by about 0.07, in the same order. One-sided perplexity's score is mostly ties, which count as wrong. The trained features are still to be scored here.
+
 **d. Quality ladders.** Train systems on 1k, 2k, 4k, … verses, or take checkpoints, and check that the metric recovers the expected order. Past experiments (§6.2) already provide many of these in real minority languages: series that vary the amount of training data, the sources or the model, plus two saved checkpoints for most experiments. It's a weak test, meaningful only where the quality steps are large. It must not depend on chrF-based checkpoint selection, which would be circular.
 
 **e. Human back-translations as a real-world check.** Some Paratext projects have a human back-translation project (the "Back Translation" project type in silnlp onboarding). These show up in `MT/scripture` as English-coded extracts, about 336 files with "BT" in the name, e.g. `en-ABCBT_2023_11_30`. That count includes dated versions and maybe false matches, so there are fewer distinct projects. Several are already used as training sources in past experiments. Where one exists:
@@ -509,6 +520,39 @@ Then test whether the metric, computed under low-resource constraints, reproduce
 - the quality ladders in §3.3d
 - per-language normalization anchors (§2.4) and the label-free objectives for per-language weights (§4.3)
 - checking where the new metric and chrF3 **disagree** on system rankings. These cases are worth inspecting by hand, and they would be the first items to send to human raters if a human check (Phase 10) happens.
+
+**g. Field-test judgments of Scripture Forge drafts.** The 2025 NT field test and a second trial asked translation teams to judge real drafts in their own languages. `btmetric-collect-field-tests` reads the workbooks (exported from Google Drive with rclone) into one table, with each team's project and MT source in `btmetric/datasets/field_test_teams.tsv`:
+
+| Activity | Judged verses | With a reference | Reference from before the trial |
+|---|---|---|---|
+| Draft comparison: two models' drafts of a verse; A better, B better, both good or both poor | 1,633 (32 comparisons) | 691 | 217 |
+| Usability: correct the draft or start over from the source | 1,352 | 526 | about 190 |
+| Human vs. AI: would this draft have helped, beside the team's own translation | 134 | 119 | about 100 |
+| Correction: the team's post-edit of a draft | 547 | not yet used | |
+
+References come from the latest extract of the team's project. **Many are not independent of the drafts.** Several second-trial projects added the judged verses after the trial by editing AI drafts. In Team 18 and Team 20 about half the "references" are near-copies of one draft, and they favour Draft A while the teams preferred Draft B (Team 20: 40 to 7). So each verse records the first extract it appears in, and a reference counts as independent only if it predates the trial's drafts (taken as just after the extracts the trial models trained on). For Team 3, the experiment configs and the drafts' orthography confirm the project; the MT source is `rw-SRC`, although the sheets show SRC2.
+
+The teams themselves agree on only **63%** of verse preferences (130 verse pairs that two groups or judges both decided), the ceiling for any metric. Agreement of each feature with the teams (`btmetric-field-test-agreement`), with metric ties counting as wrong:
+
+| Feature | Verse preference, independent refs (128 pairs) | All refs (413) | Model comparisons won, independent (all) | Usability, independent |
+|---|---|---|---|---|
+| **coverage-source** | **0.64** (0.68 where it decides) | 0.63 | **5/5** (10/14) | 0.54 |
+| **coverage-target** | **0.64** | 0.63 | **5/5** (10/14) | 0.52 |
+| chrF3 | 0.59 | 0.54 | 3/5 (8/14) | **0.60** |
+| spBLEU | 0.57 | 0.55 | 2/5 (6/14) | 0.51 |
+| perplexity | 0.57 | 0.48 | 2/5 (6/14) | 0.35 |
+| BLEU | 0.48 | 0.49 | 2/5 (5/14) | 0.51 |
+| coverage-reference | 0.46 | 0.45 | 4/5 (8/14) | 0.54 |
+
+- **Coverage matches the human ceiling, the opposite of WMT news**, where it rewarded literal translation (§2.2.2). These teams prefer the draft that renders more of the source, which suits Bible drafting, where omissions are costly.
+- **Coverage barely depends on the reference.** It is relative to the reference, which mostly cancels between two drafts of one verse, so it survives references written from a draft (Team 20: chrF3 0.17, coverage-target 0.81).
+- **chrF3 and coverage carry different information.** Their verse-level differences hardly correlate (r = 0.19). Adding standardized chrF3 and coverage-target gives 0.68 on independent references.
+- **Teams vary.** chrF3 does better on Team 1, Team 13 and Team 16; coverage on Team 2, Team 14 and Team 3.
+- **Detectors and key terms rarely separate two drafts of one verse** (5–20% of pairs), so their accuracy looks low. Where they decide, they are right 0.56–0.75 of the time, on too few pairs to judge.
+- **Usability and "would it help" are weaker signals.** chrF3 is best on usability at 0.60; no feature beats chance on human vs. AI (about 100 verses).
+- **The samples are small:** ±0.09 on 128 pairs, and only 5 model comparisons with independent references.
+
+Still to do: use the corrections as references for their verses, parse the Team 24 and Team 25 workbooks (a different format), and fit the combination with these judgments held out by team.
 
 ### 3.4 Baselines
 
@@ -801,11 +845,11 @@ Each experiment directory typically contains:
 | **3. Perturbation suite** | Implement perturbations that change meaning; calibrate their frequencies against real MT errors | Bible challenge set, plus the memorization gate | **Done**: synthetic and real-error challenge sets, severities, calibration, memorization gate |
 | **4. Features** | Implement chrF3, key terms, alignment coverage and perplexity ratio under low-resource constraints; ablate each against its full-resource version; drop features that add nothing | Core feature set with standalone correlations | **Mostly done**: coverage, key terms, perplexity, trained in-domain and tested on the challenge set and WMT; full-resource ablations not done |
 | **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision | **Partial**: reverse-NLLB scoring and the memorization gate done; fine-tuned and scratch reverse models written but not yet evaluated; LLM options and human back-translation validation not started |
-| **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings | **Partial**: xCOMET-XL silver labels on 162 past test sets being scored; Bible-only MT systems and quality ladders not trained |
+| **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings | **Partial**: xCOMET-XL silver labels on 162 past test sets, lexical baselines compared (§3.3c); field-test judgments collected and features compared (§3.3g); Bible-only MT systems and quality ladders not trained |
 | **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set and WMT; guards tested. Normalization (§2.4), expert priors and per-language weights not started |
 | **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines | **Partial**: thresholds on WMT MQM; Bible-domain thresholds and reporting with the paired bootstrap pending |
 | **9. Integration** | Add the metric as a silnlp scorer; optionally project it in quality estimation | Metric in production use | Not started |
-| **10. (Optional) Human check** | Small ranking or usability study on 1–2 minority languages, using `sample_usability.py` | Direct evidence on target-domain correlation | Not started |
+| **10. (Optional) Human check** | Small ranking or usability study on 1–2 minority languages, using `sample_usability.py` | Direct evidence on target-domain correlation | **Partly covered** by the 2025 field-test judgments (§3.3g); a study with independent references would strengthen it |
 
 ---
 
@@ -813,7 +857,7 @@ Each experiment directory typically contains:
 
 - **Clarity** gets only indirect validation through MQM fluency and coherence categories. It will be the weakest-supported criterion.
 - **Domain gap:** human judgments come from news and general-domain text; Bible-domain validation relies on perturbations, alternative translations, silver labels and human back-translations.
-- **What the claim is:** the evidence shows the metric tracks human judgment under simulated low-resource conditions and behaves correctly on Bible text. It doesn't directly show correlation with consultant judgments on minority-language Scripture. Phase 10 would close most of that gap.
+- **What the claim is:** the evidence shows the metric tracks human judgment under simulated low-resource conditions and behaves correctly on Bible text. The field-test judgments (§3.3g) give direct but small evidence on minority-language Scripture: from translation teams rather than consultants, with few comparisons that have independent references. Phase 10 would close more of that gap.
 - **Memorization:** pretrained models have memorized Bibles in major languages. This affects back-translation features, forward systems in the simulation, and silver judges. Back-translation features have to pass the memorization gate.
 - **Bias in the silver labels:** MetricX, xCOMET and LLM judges have their own biases; use agreement across several of them.
 - **Key term coverage:** most projects have no curated renderings, so the feature depends on how accurately alignment infers them, which varies by term category and corpus size. §2.2.1's validation against curated renderings measures this.
