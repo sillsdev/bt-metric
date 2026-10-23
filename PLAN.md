@@ -558,16 +558,19 @@ COMET-22 was trained on WMT 2017–20 direct-assessment data, so its scores on t
 
 - **Bible.** Test set: Hebrew OT → English NASB, 22 MT systems, 3,000 held-out verses. The table gives the share of MT systems each published translation outscores:
 
-  | Translation | chrF3 | BLEU | COMET-22 | AfriCOMET |
-  |---|---|---|---|---|
-  | ESV, NKJV, RSV, NRSV, BSB, CSB, WEB, NIV (same tradition as NASB) | 100% | 64–100% | 100% | 100% |
-  | NET | 77% | 64% | 100% | 100% |
-  | NLT | 64% | 64% | 100% | 100% |
-  | GNT | 64% | 50% | 82% | 68% |
-  | LSV, YLT (literal, archaic) | 64% | 64% | 64% | 64–68% |
-  | CEV | **0%** | **0%** | 64% | 64% |
+  | Translation | chrF3 | BLEU | COMET-22 | AfriCOMET | xCOMET-XL |
+  |---|---|---|---|---|---|
+  | ESV, NKJV, RSV, NRSV, BSB, CSB, WEB, NIV (same tradition as NASB) | 100% | 64–100% | 100% | 100% | 100% |
+  | NET | 77% | 64% | 100% | 100% | 100% |
+  | NLT | 64% | 64% | 100% | 100% | 100% |
+  | GNT | 64% | 50% | 82% | 68% | **100%** |
+  | LSV (literal) | 64% | 64% | 64% | 68% | **91%** |
+  | YLT (literal, archaic) | 64% | 64% | 64% | 64% | 64% |
+  | CEV | **0%** | **0%** | 64% | 64% | **86%** |
 
-  Every lexical metric scores CEV below every MT system. COMET helps with NLT and NET, but about 8 MT systems still outscore CEV, LSV, YLT and partly GNT under every metric. The new metric needs to fix this.
+  Every lexical metric scores CEV below every MT system. COMET-22 helps with NLT and NET, but about 8 MT systems still outscore CEV, LSV, YLT and partly GNT. **xCOMET-XL comes closest to the desired behaviour.** It puts every modern translation, literal or dynamic, above all MT systems, except CEV, which about 3 MT systems still outscore. Archaic YLT loses to about 8 MT systems under every metric. The new metric needs to fix this.
+
+  This also bears on silver labels (§3.3c): xCOMET-XL is a reasonable silver label for major languages, far better than chrF3 or COMET-22 at not penalizing freer valid translations. It isn't perfect, though, so it should be one signal among several.
 - **WMT.** 11 alternative human translations (excluding the one used as reference) were judged with MQM alongside MT systems. MQM raters ranked them 3.5th on average out of about 14 systems; every lexical metric ranked them about 11th. Typical cases: MQM 1st → chrF3 9th of 10; MQM 2nd → 16th of 16.
 
 ### 3.5 Meta-evaluation statistics
