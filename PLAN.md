@@ -221,6 +221,23 @@ Coverage's advantage appears only on errors that are defined by length or by con
   - back-translation scoring (§2.3, Phase 5), the only accuracy signal that doesn't rest on surface overlap
   - the Bible-domain human check (Phase 10), which is now the main way to settle what helps on Scripture
 
+**Detector results** (October 2026). The detectors are silent unless the hypothesis keeps under 70% of the reference's coverage, so on mild errors they mostly tie:
+
+| Error (Bible challenge set) | source-detector | target-detector | reference-detector | chrF3 |
+|---|---|---|---|---|
+| addition | 0.05 | 0.45 | 0.13 | 0.49 |
+| repetition | 0.04 | 0.41 | 0.10 | 0.62 |
+| omission | 0.54 | 0.09 | 0.77 | 0.98 |
+| truncation | 0.64 | 0.11 | 0.89 | 1.00 |
+| source copy | 0.70 | 0.71 | 0.85 | 0.98 |
+| wrong verse | 0.90 | 0.89 | 0.96 | 0.98 |
+
+- Gross errors (wrong verse, source copy, heavy truncation) are caught; mild ones mostly tie, as a guard's should.
+- `coverage-target-detector` catches 41–45% of mild additions and repetitions, where chrF3 is near chance, but far fewer than continuous coverage-target (0.98).
+- On WMT human judgments they add nothing: each is at chance at system level (0.47–0.52), segment acc_eq is 0.07–0.11 (almost all ties), and the refit combination gives them 0–0.03 weight (system level 0.753 vs chrF3 0.747, unchanged).
+
+This confirms the decision above: a guard against runaway output, not a source of quality signal.
+
 **Other human translations, Bible text** (§3.3b, Hebrew → English NASB). Share of the 22 MT systems each published translation outscores; a fair metric puts every one near 1.00:
 
 | Translation (style) | chrF3 | COMET-22 | coverage-source | coverage-target | perplexity |
@@ -256,11 +273,11 @@ Many projects have no human back-translation, so any back-translation feature ha
 **Scoring that subtracts the memorized prior.** Plain `log P(src | hyp)` still benefits from memorization. Instead, measure how much information the hypothesis adds beyond what the model already expects (cf. conditional cross-mutual information, Fernandes et al. 2021):
 
 ```
-info(x)  = log P(src | x) − log P(src | ∅)     # ∅ = empty or uninformative input
-bt_score = info(hyp) / info(ref)
+info(x)  = [log P(src | x) − log P(src | ∅)] / source tokens     # ∅ = empty input
+bt_score = info(hyp) − info(ref)
 ```
 
-Comparing with the reference cancels per-verse difficulty and the reverse model's overall quality. Verses where `info(ref)` is close to zero (memorization dominates) get a flag rather than a score.
+Comparing with the reference cancels per-verse difficulty and the reverse model's overall quality. In a difference the prior cancels, so its role is to flag verses where `info(ref)` is close to zero (memorization dominates); those get no score rather than a misleading one. (The ratio first planned is unstable when `info(ref)` is small.)
 
 **Cost controls:**
 
@@ -273,6 +290,28 @@ Comparing with the reference cancels per-verse difficulty and the reverse model'
 
 - **Error survival rate:** does the injected error appear in the back-translation?
 - **Wrong-verse check:** does a wrong verse back-translate to something unlike the correct source?
+
+**Phase 5 status** (October 2026).
+
+*Reverse NLLB scoring* (`bt-nllb`, `btmetric/features/back_translation.py`). NLLB-200 distilled 600M scores the source given the hypothesis by forced decoding; no back-translation is generated. One fp16 forward pass per text, on the GPU.
+
+*Memorization gate* (`btmetric-memorization-gate`). This is a worst case for memorization: the references are German (GCLNR00), French (TOB) and Russian (Synod) Bibles, the kind of text NLLB was trained on, with English BSB as the source. 400 verses per language get each mild perturbation; key terms and negation words are inferred by alignment. Share of verses where the injected error lowers the score:
+
+| Error | German | French | Russian |
+|---|---|---|---|
+| wrong verse | 1.00 | 1.00 | 1.00 |
+| truncation | 0.91 | 0.99 | 0.98 |
+| omission | 0.92 | 0.96 | 0.97 |
+| key term | 0.93 | 0.92 | 0.90 |
+| addition | 0.79 | 0.91 | 0.90 |
+| negation | 0.81 | 0.62 | 0.93 |
+| word order | 0.75 | 0.83 | 0.82 |
+| repetition | 0.72 | 0.81 | 0.80 |
+| source copy | 1.00 (0.00 without the copy guard) | 1.00 | 1.00 |
+
+- **Memorization doesn't hide the errors.** No verse was flagged as memorized (`info(ref)` > 0.05 everywhere), and errors survive 72–100% of the time even on Bibles NLLB has seen. French negation is the weakest, plausibly because removing *pas* leaves *ne*.
+- **Source copying broke forced decoding.** NLLB finds English given English near certain, so a copied source outscored the reference in almost every verse. A copy guard fixes it: where the hypothesis's chrF against the source exceeds the reference's by more than 20 points, the hypothesis is scored as adding no information.
+- The gate passes for reverse NLLB scoring. **Next:** the Bible challenge set (real MT outputs), WMT human judgments, minority languages NLLB doesn't cover (fine-tuning the reverse model or training one from scratch), and the generation-based options.
 
 ### 2.4 Per-language normalization
 
@@ -448,13 +487,14 @@ Run on every evaluation above:
 - AfriCOMET
 - an LLM judge where feasible
 
-**Phase 2 results so far** (October 2026; `data/results/`). Still missing: TER (implemented, but sacrebleu's version takes over an hour, so it isn't run by default), xCOMET (gated model) and an LLM judge.
+**Phase 2 results so far** (October 2026; `data/results/`). Still missing: TER (implemented, but sacrebleu's version takes over an hour, so it isn't run by default) and an LLM judge.
 
 *Agreement with human judgments.* System level is pairwise accuracy on WMT MQM 2020–22, 830 system pairs. Segment level is acc_eq averaged over WMT 2021–22 sets, and Kendall's tau-b on AfriMTE.
 
 | Metric | System level (95% CI) | WMT 21–22 segment acc_eq | AfriMTE tau-b |
 |---|---|---|---|
-| COMET-22 | **0.784** (0.758–0.814) | 0.46–0.54 | 0.255 |
+| xCOMET-XL | **0.794** (0.767–0.823) | 0.44–0.52 | 0.257 |
+| COMET-22 | 0.784 (0.758–0.814) | 0.46–0.54 | 0.255 |
 | AfriCOMET | 0.778 (0.752–0.808) | 0.46–0.54 | **0.320** |
 | m-chrF3 | 0.747 (0.718–0.776) | 0.41–0.52 | 0.213 |
 | chrF3++ | 0.729 (0.699–0.758) | 0.41–0.52 | 0.214 |
@@ -462,7 +502,7 @@ Run on every evaluation above:
 | spBLEU | 0.723 (0.693–0.754) | 0.41–0.51 | 0.182 |
 | BLEU | 0.718 (0.688–0.749) | 0.41–0.44 | 0.176 |
 
-COMET-22 was trained on WMT 2017–20 direct-assessment data, so its scores on those years are inflated; compare it on WMT 2021–22 and AfriMTE. The lexical metrics are statistically indistinguishable from one another at system level.
+COMET-22 was trained on WMT 2017–20 direct-assessment data, so its scores on those years are inflated; compare it on WMT 2021–22 and AfriMTE. xCOMET-XL is the strongest system-level metric, significantly better than chrF3 but not than COMET-22. At segment level it leads on the MQM sets it was trained toward (2022 acc_eq 0.50 vs 0.46), trails slightly on DA, and is no better than COMET-22 on African languages, where AfriCOMET stays ahead. The lexical metrics are statistically indistinguishable from one another at system level.
 
 *Baselines on real minority-language system pairs* (`btmetric-score-system-pairs`). All 49,525 usable config pairs from past silnlp experiments; no human labels.
 

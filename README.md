@@ -143,6 +143,8 @@ Beyond the baselines, these features are opt-in because each trains a model per 
 | `key-terms`, `key-terms-names` | Share of the reference's key term renderings the hypothesis also uses (all terms, or proper names only) |
 | `perplexity`, `perplexity-one-sided` | Distance between the hypothesis's and the reference's character perplexity under a 5-gram model of the target language (one-sided: only being less predictable counts) |
 
+| `bt-nllb` | How much the hypothesis tells a reverse NLLB-200 model about the source (forced decoding, no generated back translation), relative to the reference. Verses whose reference tells the model little beyond what it predicts with no input (memorized from Bibles) get no score, and a hypothesis that copies the source gets no credit. Runs on the GPU; NaN for languages NLLB doesn't cover |
+
 PLAN.md §2.2.2 records how each fares. On human judgments of news, none adds to chrF3, and coverage is kept only as an optional guard against loops and runaway output.
 
 Fit the combined metric on human judgments (WMT MQM and DA), with in-domain training, and compare it with each feature alone at segment and system level. `--add` adds features to an existing score table:
@@ -156,6 +158,12 @@ Check which features catch the omissions and additions that WMT MQM annotators m
 
 ```
 uv run btmetric-check-mqm-error-categories --major-only
+```
+
+Check whether back-translation scoring survives NLLB's memorization of the Bible: inject each error type into other Bibles (German, French, Russian by default) as references for English sources, and count how often the perturbed reference scores lower than the clean one, and how many verses count as memorized:
+
+```
+uv run btmetric-memorization-gate
 ```
 
 Generated and downloaded files go in `data/`, which is not committed.

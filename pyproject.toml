@@ -32,6 +32,7 @@ btmetric-build-natural-errors = "btmetric.perturbations.natural_errors:main"
 btmetric-fit-combination = "btmetric.combination.challenge:main"
 btmetric-fit-combination-human = "btmetric.combination.human:main"
 btmetric-check-mqm-error-categories = "btmetric.analysis.mqm_error_categories:main"
+btmetric-memorization-gate = "btmetric.analysis.memorization_gate:main"
 
 [dependency-groups]
 dev = [
@@ -39,6 +40,10 @@ dev = [
     "flake8>=7.1",
     "isort>=6.0",
     "pytest>=8.3",
+]
+gpu = [
+    "torch>=2.7",
+    "transformers>=4.46,<5",
 ]
 
 [build-system]
@@ -58,3 +63,15 @@ line_length = 120
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.uv]
+# The GPU group (PyTorch, transformers) is installed by default, so `uv run` never removes it.
+default-groups = ["dev", "gpu"]
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu128" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true

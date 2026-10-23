@@ -14,6 +14,7 @@ from scipy.stats import kendalltau
 from ..evaluation.data import JudgedOutputs, SegmentJudgments
 from ..evaluation.loaders import AfriMteLoader, WmtDaLoader, WmtMqmLoader
 from ..features.alignment import AlignerCache, AlignmentCoverage, ReferenceAnchoredCoverage
+from ..features.back_translation import BackTranslationInfo
 from ..features.base import Feature
 from ..features.chrf import ChrF
 from ..features.comet import Comet
@@ -21,6 +22,7 @@ from ..features.corpora import BibleCorpus, TrainingCorpus
 from ..features.key_terms import InferredRenderings, KeyTermAccuracy
 from ..features.lexical import Bleu, MeanChrF, NegativeTer
 from ..features.naturalness import CharNgramModel, PerplexityRatio
+from ..features.reverse_models import FineTunedNllb, ScratchReverseModel
 from .agreement import PairwiseAgreement
 
 LOGGER = logging.getLogger(__name__)
@@ -192,6 +194,9 @@ class FeatureRegistry:
             "coverage-target-detector": lambda: AlignmentCoverage(
                 "target", aligners=self._aligners, detector_tolerance=0.3
             ),
+            "bt-nllb": BackTranslationInfo,
+            "bt-nllb-finetuned": lambda: BackTranslationInfo(FineTunedNllb(corpus)),
+            "bt-scratch": lambda: BackTranslationInfo(ScratchReverseModel(corpus)),
             "coverage-reference-detector": lambda: ReferenceAnchoredCoverage(
                 aligners=self._aligners, detector_tolerance=0.3
             ),
@@ -214,6 +219,9 @@ class FeatureRegistry:
             "coverage-source-detector",
             "coverage-target-detector",
             "coverage-reference-detector",
+            "bt-nllb",
+            "bt-nllb-finetuned",
+            "bt-scratch",
         }
 
     def names(self) -> List[str]:
