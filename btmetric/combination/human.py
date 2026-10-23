@@ -10,7 +10,7 @@ import argparse
 import hashlib
 import logging
 from pathlib import Path
-from typing import Dict, Iterator, List, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -102,24 +102,39 @@ class SegmentScoreTable:
         return pd.read_csv(self._path, sep="\t", keep_default_na=False, na_values=[""])
 
 
-def within_item_pairs(table: pd.DataFrame, features: List[str]) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-    """Feature differences, human-preference labels and datasets for every pair of hypotheses of one source.
+def within_item_pairs(
+    table: pd.DataFrame, features: List[str], max_pairs_per_dataset: Optional[int] = None, seed: int = 0
+) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+    """Feature differences, human-preference labels and datasets for pairs of hypotheses of one source.
 
-    Pairs the humans scored equally say nothing about which is better and are skipped.
+    Pairs the humans scored equally say nothing about which is better and are skipped. All pairs of all ~100 WMT
+    datasets together ran the machine out of memory, so each dataset's pairs can be capped at a random sample;
+    tens of thousands per dataset fit the few weights as well as millions do.
     """
+    rng = np.random.default_rng(seed)
     deltas, labels, datasets = [], [], []
-    for (dataset, _), rows in table.groupby(["dataset", "item"], sort=False):
-        if len(rows) < 2:
+    for dataset, dataset_rows in table.groupby("dataset", sort=False):
+        dataset_deltas, dataset_labels = [], []
+        for _, rows in dataset_rows.groupby("item", sort=False):
+            if len(rows) < 2:
+                continue
+            i, j = np.triu_indices(len(rows), k=1)
+            human = rows["human"].to_numpy()
+            values = rows[features].to_numpy(dtype=float)
+            gold = human[i] - human[j]
+            decided = gold != 0
+            dataset_deltas.append(values[i][decided] - values[j][decided])
+            dataset_labels.append(np.sign(gold[decided]))
+        if not dataset_deltas:
             continue
-        i, j = np.triu_indices(len(rows), k=1)
-        human = rows["human"].to_numpy()
-        values = rows[features].to_numpy(dtype=float)
-        gold = human[i] - human[j]
-        decided = gold != 0
-        deltas.append(values[i][decided] - values[j][decided])
-        labels.append(np.sign(gold[decided]))
-        datasets.extend([dataset] * int(decided.sum()))
-    return pd.DataFrame(np.vstack(deltas), columns=features), np.concatenate(labels), np.array(datasets)
+        dataset_deltas_array, dataset_labels_array = np.vstack(dataset_deltas), np.concatenate(dataset_labels)
+        if max_pairs_per_dataset and len(dataset_labels_array) > max_pairs_per_dataset:
+            kept = rng.choice(len(dataset_labels_array), size=max_pairs_per_dataset, replace=False)
+            dataset_deltas_array, dataset_labels_array = dataset_deltas_array[kept], dataset_labels_array[kept]
+        deltas.append(dataset_deltas_array)
+        labels.append(dataset_labels_array)
+        datasets.append(np.full(len(dataset_labels_array), dataset, dtype=object))
+    return pd.DataFrame(np.vstack(deltas), columns=features), np.concatenate(labels), np.concatenate(datasets)
 
 
 def collection_of(dataset: str) -> str:
@@ -182,6 +197,9 @@ def main() -> None:
         help="Text that aligners and language models train on; it must match the domain scored (news for WMT)",
     )
     parser.add_argument("--folds", type=int, default=5, help="Folds for models trained on the judged sets' own text")
+    parser.add_argument(
+        "--max-pairs-per-dataset", type=int, default=20000, help="Random sample of segment pairs per dataset (0: all)"
+    )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -195,7 +213,7 @@ def main() -> None:
         table_file.add_columns(judged, args.add, registry)
     table = table_file.load()
     features = args.features or [c for c in table.columns if c not in ("dataset", "item", "system", "human")]
-    deltas, labels, datasets = within_item_pairs(table, features)
+    deltas, labels, datasets = within_item_pairs(table, features, args.max_pairs_per_dataset or None)
     values = table[features]
     scale = PerGroupScale().fit(values, table["dataset"].to_numpy(), features)
     scaled = scale.apply(deltas, datasets, features)

@@ -74,3 +74,18 @@ def test_score_table_adds_feature_columns_to_matching_rows(tmp_path):
     loaded = table.load()
     assert list(loaded.columns) == ["dataset", "item", "system", "human", "chrF3", "BLEU"]
     assert loaded["chrF3"].iloc[0] == 100.0
+
+
+def test_within_item_pairs_can_be_capped_per_dataset():
+    from btmetric.combination.human import within_item_pairs
+
+    rows = []
+    for dataset in ("wmt22-da-en-de", "wmt22-da-en-cs"):
+        for item in range(10):
+            for system, score in zip("abcd", (4.0, 3.0, 2.0, 1.0)):
+                rows.append({"dataset": dataset, "item": item, "system": system, "human": score, "chrF3": score})
+    table = pd.DataFrame(rows)
+    _, labels, datasets = within_item_pairs(table, ["chrF3"], max_pairs_per_dataset=15)
+    assert len(labels) == 30 and (pd.Series(datasets).value_counts() == 15).all()
+    _, all_labels, _ = within_item_pairs(table, ["chrF3"])
+    assert len(all_labels) == 120
