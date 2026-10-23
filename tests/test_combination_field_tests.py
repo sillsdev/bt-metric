@@ -33,3 +33,11 @@ def test_weights_fit_on_other_teams_carry_over_to_a_held_out_team():
     assert len(pairs.labels) == 240 and pairs.independent.sum() == 60
     held_out = pairs.leave_one_team_out(l2=0.01)
     assert np.mean(held_out > 0) > 0.95
+
+
+def test_a_fixed_share_is_kept_and_the_fitted_features_share_the_rest():
+    rows = _rows(teams=3, verses=40).assign(**{"key-terms": 1.0})
+    pairs = FieldTestPairs(rows, ["chrF3", "coverage-target", "key-terms"], fixed={"key-terms": 0.2})
+    weights = pairs.fit(l2=0.01, independent_only=False)
+    assert weights[2] == 0.2 and abs(weights.sum() - 1.0) < 1e-9
+    assert weights[1] > weights[0]

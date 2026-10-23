@@ -25,6 +25,8 @@ from .silver_agreement import SilverTable
 
 LOGGER = logging.getLogger(__name__)
 
+DETECTOR_FEATURES = [f"coverage-{side}-detector" for side in ["source", "target", "reference"]]
+
 TEXT_COLUMNS = {"item", "comparison", "team", "kind", "label", "test_hash", "source_extract", "target_extract", "vref"}
 TEXT_COLUMNS |= {"system", "source", "hypothesis", "reference", "independent"}
 
@@ -103,10 +105,9 @@ def analysis_report(rows: pd.DataFrame, judgments: pd.DataFrame, metrics: List[s
     """For each verse-analysis criterion: within each team, over every two analysed drafts the team rated
     differently, how often the metric scores the better-rated one higher. A marked error type and a larger edit
     proportion count as worse. The "pairs" rows give how many decided pairs each accuracy rests on."""
-    labels = judgments.loc[judgments["kind"] == "analysis", ["item"] + ANALYSIS_LABELS]
+    analysed = _analysed_verses(rows, judgments)
     worse_when_higher = [label for label in ANALYSIS_LABELS if label.startswith("error_") or label == "edit_proportion"]
-    labels[worse_when_higher] = -labels[worse_when_higher]
-    analysed = rows[rows["kind"] == "analysis"].merge(labels, on="item")
+    analysed[worse_when_higher] = -analysed[worse_when_higher]
     records = []
     for references, subset in [("independent", analysed[analysed["independent"]]), ("all", analysed)]:
         pairs = {"metric": "pairs", "references": references, "verses": len(subset)}
@@ -121,6 +122,60 @@ def analysis_report(rows: pd.DataFrame, judgments: pd.DataFrame, metrics: List[s
                 pairs[label] = max(pairs.get(label, 0), agreement.decided_pairs())
             records.append(record)
         records.append(pairs)
+    return pd.DataFrame(records)
+
+
+def _analysed_verses(rows: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
+    labels = judgments.loc[judgments["kind"] == "analysis", ["item"] + ANALYSIS_LABELS]
+    return rows[rows["kind"] == "analysis"].merge(labels, on="item")
+
+
+def flag_report(rows: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
+    """Whether a feature's warning picks out the verses teams found a problem in: for each flag and problem, how
+    often the problem was marked on flagged and on other verses, the share of marked verses flagged, and a one-sided
+    Fisher test. Flags are a detector firing, a key-term mismatch, or a verse in a team's lowest quarter."""
+    from scipy.stats import fisher_exact
+
+    verses = _analysed_verses(rows, judgments)
+
+    def lowest_quarter(feature: str) -> pd.Series:
+        return verses.groupby("team")[feature].transform(lambda v: v <= v.quantile(0.25)) & verses[feature].notna()
+
+    flags = {f"{f} fires": (verses[f] < 0, verses[f].notna()) for f in DETECTOR_FEATURES if f in verses}
+    for feature in ["key-terms", "key-terms-pn"]:
+        if feature in verses:
+            flags[f"{feature} mismatch"] = (verses[feature] < 1, verses[feature].notna())
+    for feature in ["chrF3", "perplexity", "coverage-target", "coverage-reference"]:
+        if feature in verses:
+            flags[f"{feature} lowest quarter"] = (lowest_quarter(feature), verses[feature].notna())
+    problems = {error: verses[error] > 0 for error in ANALYSIS_LABELS if error.startswith("error_")}
+    problems.update(
+        {
+            "meaning differs": verses["same_meaning"] == 0,
+            "not clear": verses["clear"] == 0,
+            "does not sound right": verses["sounds_right"] == 0,
+            "score under 50": verses["score"] < 50,
+        }
+    )
+    records = []
+    for flag_name, (flag, applicable) in flags.items():
+        for problem_name, problem in problems.items():
+            f, p = flag[applicable].to_numpy(bool), problem[applicable].to_numpy(bool)
+            if not f.any() or not p.any() or f.all():
+                continue
+            table = [[np.sum(f & p), np.sum(f & ~p)], [np.sum(~f & p), np.sum(~f & ~p)]]
+            records.append(
+                {
+                    "flag": flag_name,
+                    "problem": problem_name,
+                    "flagged": int(f.sum()),
+                    "verses": len(f),
+                    "rate_if_flagged": float(np.mean(p[f])),
+                    "rate_otherwise": float(np.mean(p[~f])),
+                    "recall": float(np.mean(f[p])),
+                    "p": float(fisher_exact(table, alternative="greater")[1]),
+                }
+            )
     return pd.DataFrame(records)
 
 
@@ -194,6 +249,10 @@ def main() -> None:
         analyses = analysis_report(rows, judgments, metrics)
         analyses.to_csv(args.output.with_name(args.output.stem + "_analysis.tsv"), sep="\t", index=False)
         LOGGER.info(f"Agreement with the verse analyses:\n{analyses.round(3).to_string(index=False)}")
+        flags = flag_report(rows, judgments)
+        flags.to_csv(args.output.with_name(args.output.stem + "_flags.tsv"), sep="\t", index=False)
+        strong = flags[(flags["p"] < 0.05) & (flags["rate_if_flagged"] > flags["rate_otherwise"])]
+        LOGGER.info(f"Flags that pick out marked problems (p < 0.05):\n{strong.round(3).to_string(index=False)}")
 
 
 if __name__ == "__main__":

@@ -20,11 +20,17 @@ from ..combination.model import PairwiseLogLinear, PerGroupScale
 
 LOGGER = logging.getLogger(__name__)
 
+# Key terms rarely separate two drafts of one verse, so the fit gives them no weight; a fixed share credits free
+# translations that keep the standard renderings of Biblical terms (PLAN.md 4.1).
+FIXED_SHARES: Dict[str, Dict[str, float]] = {"chrF3 + coverage-target + key-terms fixed at 20%": {"key-terms": 0.2}}
+
 FEATURE_SETS: Dict[str, List[str]] = {
     "chrF3": ["chrF3"],
     "chrF3 + coverage-target": ["chrF3", "coverage-target"],
     "chrF3 + coverage": ["chrF3", "coverage-source", "coverage-target"],
     "chrF3 + detectors": ["chrF3", "coverage-source-detector", "coverage-target-detector"],
+    "chrF3 + coverage-target + key-terms": ["chrF3", "coverage-target", "key-terms"],
+    "chrF3 + coverage-target + key-terms fixed at 20%": ["chrF3", "coverage-target", "key-terms"],
     "all": [
         "chrF3",
         "spBLEU",
@@ -46,7 +52,11 @@ DETECTORS = [f"coverage-{side}-detector" for side in ["source", "target", "refer
 class FieldTestPairs:
     """The compared verses a team preferred one draft on: scaled feature differences A - B and +1 when A won."""
 
-    def __init__(self, rows: pd.DataFrame, features: List[str]) -> None:
+    def __init__(self, rows: pd.DataFrame, features: List[str], fixed: Optional[Dict[str, float]] = None) -> None:
+        """fixed: shares of the weight set by hand (expert priors, PLAN.md 4.2) rather than fitted; the fitted
+        features share the rest."""
+        self.features = features
+        self.fixed = fixed or {}
         compared = rows[(rows["kind"] == "comparison") & rows["label"].isin(["A", "B"])]
         wide = compared.pivot_table(index=["item", "label", "team", "independent"], columns="system", values=features)
         wide = wide.reset_index()
@@ -58,11 +68,11 @@ class FieldTestPairs:
         self.scale = PerGroupScale(DETECTORS).fit(scored, scored["team"].to_numpy(), features)
         self.deltas = self.scale.apply(raw, self.teams, features)
 
-    def fit(self, l2: float, independent_only: bool) -> PairwiseLogLinear:
-        """References written from a draft favour that draft, which teaches the fit that reference-based features
-        disagree with the teams, so training can be limited to independent references."""
+    def fit(self, l2: float, independent_only: bool) -> np.ndarray:
+        """Weight shares, summing to 1. References written from a draft favour that draft, which teaches the fit that
+        reference-based features disagree with the teams, so training can be limited to independent references."""
         train = self.independent if independent_only else np.ones(len(self.labels), dtype=bool)
-        return PairwiseLogLinear(l2).fit(self.deltas[train], self.labels[train])
+        return self._weights(l2, train)
 
     def leave_one_team_out(self, l2: float, independent_only: bool = False) -> np.ndarray:
         """Each team's pairs scored by weights fit on the other teams; positive when the score sides with the team."""
@@ -70,9 +80,15 @@ class FieldTestPairs:
         predictions = np.full(len(self.labels), np.nan)
         for team in np.unique(self.teams):
             held = self.teams == team
-            model = PairwiseLogLinear(l2).fit(self.deltas[~held & train], self.labels[~held & train])
-            predictions[held] = model.score(self.deltas[held])
+            predictions[held] = self.deltas[held] @ self._weights(l2, ~held & train)
         return predictions * self.labels
+
+    def _weights(self, l2: float, train: np.ndarray) -> np.ndarray:
+        free = [k for k, f in enumerate(self.features) if f not in self.fixed]
+        shares = PairwiseLogLinear(l2).fit(self.deltas[train][:, free], self.labels[train]).weight_shares()
+        weights = np.array([self.fixed.get(f, 0.0) for f in self.features])
+        weights[free] = shares * (1.0 - sum(self.fixed.values()))
+        return weights
 
 
 def _accuracy(signed: np.ndarray) -> float:
@@ -165,7 +181,7 @@ def main() -> None:
         type=Path,
         default=[
             Path(f"data/results/human_translations{suffix}.tsv")
-            for suffix in ["", "_features", "_features2", "_detectors"]
+            for suffix in ["", "_features", "_features2", "_detectors", "_key_terms"]
         ],
     )
     parser.add_argument("--max-pairs-per-dataset", type=int, default=20000)
@@ -183,10 +199,9 @@ def main() -> None:
     rows = SilverTable(args.rows).load()
     records = []
     for name, features in FEATURE_SETS.items():
-        pairs = FieldTestPairs(rows, features)
+        pairs = FieldTestPairs(rows, features, FIXED_SHARES.get(name))
         held_out = pairs.leave_one_team_out(args.l2, args.train_on == "independent")
-        model = pairs.fit(args.l2, args.train_on == "independent")
-        weights = dict(zip(features, model.weight_shares()))
+        weights = dict(zip(features, pairs.fit(args.l2, args.train_on == "independent")))
         LOGGER.info(f"{name}: weights fit on all teams {({f: round(w, 3) for f, w in weights.items()})}")
         record = {
             "features": name,

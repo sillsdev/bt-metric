@@ -584,6 +584,22 @@ Team 25 adds 54 usability ratings (chrF3 still leads on usability, at 0.57). Tea
 - **Coverage fails across verses**, even on meaning (0.28) and omissions (0.47). It is relative to the reference: between two drafts of one verse the reference term cancels, which is why coverage wins the draft comparisons, but across verses the reference's own coverage varies and dominates. A per-verse score (usability, confidence) should leave relative coverage out or use an absolute form.
 - Some features follow the error type they target: coverage-reference with additions and word order, perplexity with word order, coverage-target and coverage-source with non-words.
 
+**Do the features' warnings pick out real problems?** On the 163 analysed verses with a reference (11 teams), how often teams marked a problem on the verses a flag picks out, against the others (`agree` writes `field_test_agreement_flags.tsv`):
+
+| Flag | Verses flagged | Problem marked more often on flagged verses |
+|---|---|---|
+| Key-term mismatch | 26 of 99 with terms | meaning differs: 23% vs. 7% (p = 0.03) |
+| Proper-name mismatch | 10 of 41 | meaning differs: 4 of 10 vs. 0 of 31 (p = 0.002); not clear: 40% vs. 10% |
+| coverage-source / -target detector fires | 5 each (3%) | added or missing words on 60–100% of them; they catch only 3–9% of marked errors |
+| coverage-reference detector fires | 15 | added word: 60% vs. 33% (p = 0.04) |
+| Perplexity, team's lowest quarter | 46 | doesn't sound right, not clear, score under 50, but only on verses chrF3 also flags: none remains on the rest |
+| chrF3, team's lowest quarter | 46 | not clear: 65% vs. 39% (p = 0.002); wrong word |
+
+- **Key terms carry the one specific accuracy signal**: a mismatched term or name makes "meaning differs" about three times as likely, and the flag names the term.
+- **The detectors are precise but rarely fire**: real field drafts seldom have gross omissions or additions. Worth keeping as warnings, since they cost nothing given the coverage aligner and catch loops and copies (§3.3a).
+- **Perplexity is not a separate naturalness measure**: it flags only what chrF3 already flags, and it penalizes other registers (§3.3b). Drop it.
+- About 100 comparisons were run on a small sample, so a few p-values under 0.05 are chance; the key-term and proper-name results are the strongest.
+
 Still to do: the teams' corrections as references (they post-edit the very draft judged, so they mostly measure edit distance), and the Team 24 and Team 25 error analyses (a transposed layout).
 
 ### 3.4 Baselines
@@ -739,7 +755,18 @@ Fitted separately on each domain, the guard set helps on the Bible (additions 0.
 - **coverage-source adds the literalness bias** (dynamic translations 0.39) without gains elsewhere; **perplexity and coverage-source together** (in "all features") make other published translations lose to MT.
 - **The detectors are the conservative option:** as good as chrF3 everywhere, and little better.
 
-**Recommendation:** for comparing systems on held-out Bible books, chrF3 + coverage-target with about equal weight (on per-team scaled scores). Keep it out of general-domain evaluation. For per-verse scores use chrF3 alone or an absolute coverage (§3.3g). Still open: the weights rest on 5 independent comparisons and 128 verse pairs, and normalization across languages (§2.4) is not done.
+**Key terms as an expert prior.** The fit gives key terms no weight: two drafts of one verse rarely differ in their key-term renderings, and a swapped term is a character change chrF3 already catches (96% of the challenge set's key-term errors, against 70% for key terms alone). But key terms credit free translations that keep the standard renderings of Biblical terms. With key terms fixed at a share of the weight (§4.2), and chrF3 and coverage-target fitted on the rest:
+
+| Key-term share | Field tests, held-out team (independent / all refs) | Challenge set | Human-translation test, all / dynamic | Silver, same verse / system level |
+|---|---|---|---|---|
+| 0% | 0.648 / 0.615 | 0.936 | 0.82 / 0.41 | 0.638 / 0.763 |
+| 10% | 0.641 / 0.605 | 0.936 | 0.84 / 0.49 | 0.639 / 0.761 |
+| **20%** | **0.648 / 0.610** | **0.936** | **0.86 / 0.53** | **0.638 / 0.768** |
+| 30% | 0.633 / 0.605 | 0.935 | 0.88 / 0.59 | 0.637 / 0.766 |
+
+(The 10% and 30% rows use the full-data fit for the field tests rather than leaving each team out.) Up to 20% nothing else changes beyond noise, while CEV, GNT and NLT beat more MT systems. The gain rests on one human-translation test, and WMT can't check key terms.
+
+**Recommendation:** for comparing systems on held-out Bible books, **chrF3 + coverage-target + key terms, about 45 / 35 / 20** (on per-group scaled scores; key terms' share is a prior, the other two are fitted). Report beside it key-term mismatches (which terms differ) and detector warnings (§3.3g). Keep the score out of general-domain evaluation, and for per-verse scores use chrF3 alone or an absolute coverage. Drop perplexity, coverage-source and bt-nllb. Still open: the weights rest on 5 independent comparisons and 128 verse pairs, and normalization across languages (§2.4) is not done.
 
 ### 4.2 Expert priors and blending
 
@@ -897,7 +924,7 @@ Each experiment directory typically contains:
 | **4. Features** | Implement chrF3, key terms, alignment coverage and perplexity ratio under low-resource constraints; ablate each against its full-resource version; drop features that add nothing | Core feature set with standalone correlations | **Mostly done**: coverage, key terms, perplexity, trained in-domain and tested on the challenge set and WMT; full-resource ablations not done |
 | **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision | **Partial**: reverse-NLLB scoring and the memorization gate done; fine-tuned and scratch reverse models written but not yet evaluated; LLM options and human back-translation validation not started |
 | **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings | **Partial**: xCOMET-XL silver labels on 162 past test sets, lexical baselines compared (§3.3c); field-test judgments collected and features compared (§3.3g); Bible-only MT systems and quality ladders not trained |
-| **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set, WMT and the field tests; guards tested; recommended weighting chrF3 + coverage-target (§4.1). Normalization (§2.4), expert priors and per-language weights not started |
+| **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set, WMT and the field tests; guards tested; recommended weighting chrF3 + coverage-target + key terms at a fixed 20% (§4.1). Normalization (§2.4), expert priors and per-language weights not started |
 | **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines | **Partial**: thresholds on WMT MQM; Bible-domain thresholds and reporting with the paired bootstrap pending |
 | **9. Integration** | Add the metric as a silnlp scorer; optionally project it in quality estimation | Metric in production use | Not started |
 | **10. (Optional) Human check** | Small ranking or usability study on 1–2 minority languages, using `sample_usability.py` | Direct evidence on target-domain correlation | **Partly covered** by the 2025 field-test judgments (§3.3g); a study with independent references would strengthen it |
