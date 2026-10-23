@@ -599,6 +599,30 @@ COMET-22 was trained on WMT 2017–20 direct-assessment data, so its scores on t
 - **Key term weight:** these sets have no Biblical-term annotations. Set this weight from the §3.3c silver labels, or use an expert prior checked with perturbation sensitivity.
 - **Bible-domain check:** confirm that weights fitted on news still rank correctly on §3.3b–d. If not, refit on the §3.3c silver labels.
 
+**First combination on the Bible challenge set** (`btmetric-fit-combination`, October 2026). All 15 features, pairwise logistic loss, weights fit leaving one test set (language) out. Share of rows where the unperturbed output scores higher:
+
+| Error | chrF3 | spBLEU | Combined |
+|---|---|---|---|
+| addition | 0.49 | 0.91 | **0.96** |
+| repetition | 0.62 | 0.87 | **0.96** |
+| key term | 0.96 | 0.93 | **0.99** |
+| word order | 0.93 | 0.87 | **0.95** |
+| wrong verse | 0.98 | 0.98 | **0.99** |
+| source copy | 0.98 | 0.98 | 0.98 |
+| truncation | **1.00** | 0.91 | 0.98 |
+| omission | **0.98** | 0.89 | 0.94 |
+| negation | **0.89** | 0.73 | 0.84 |
+| mean | 0.87 | 0.90 | **0.95** |
+
+- **The sub-scores respond to their own errors** (the check pending from §3.3a):
+  - coverage-target catches additions and repetition (0.98) and is near chance on omission and truncation; coverage-source does the opposite.
+  - key-terms responds to key term swaps (0.70), not to added or reordered text.
+  - bt-nllb is strong on gross errors (source copies, wrong verses, truncation).
+- The combination exploits this: it fixes chrF3's blind spots for additions and repetition at a small cost on omission, truncation and negation.
+- Weights fit on all test sets: coverage-target 15%, spBLEU 15%, BLEU 11%, chrF3 and m-chrF3 8% each, one-sided perplexity 7%, coverage-reference 7%, coverage-source 6%, bt-nllb 5%; the detectors, key terms and two-sided perplexity share the rest.
+- **Caveat: these are synthetic errors.** The combination is trained and tested on the same kinds of injected error, in held-out languages. That shows the features can catch these errors together, not that the combination tracks human judgments of quality.
+- **These weights conflict with the WMT fit** (§2.2.2). coverage-target gets the most weight here and none on news, where coverage is below chance because it rewards literal translations. Phase 7 has to resolve this: catch the Bible failures (additions, loops, copies) without rewarding literalness. One option is to use coverage and back-translation only as guards that penalize gross deviations, as the detector variants do, while chrF3-like features carry the general quality signal. The §3.3c silver labels on real Bible output in major languages are the evidence for choosing.
+
 ### 4.2 Expert priors and blending
 
 Compare three sources of weights:
