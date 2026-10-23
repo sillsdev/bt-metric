@@ -70,6 +70,7 @@ Score features against the human judgments: system-level pairwise accuracy on WM
 ```
 uv run btmetric-meta-evaluate                              # lexical baselines: chrF3, chrF3++, m-chrF3, BLEU, spBLEU
 uv run btmetric-meta-evaluate --features comet22 africomet # neural baselines, on the GPU
+uv run btmetric-meta-evaluate --features xcomet-xl         # xCOMET-XL (gated on Hugging Face: accept its license and log in)
 ```
 
 Results accumulate in `data/results/meta_eval.tsv`; rerunning a feature replaces its rows. TER is available with `--features ter`, but sacrebleu's implementation takes over an hour on these sets.
@@ -142,10 +143,10 @@ Beyond the baselines, these features are opt-in because each trains a model per 
 | `coverage-*-detector` | The same as error detectors: 0 while the hypothesis keeps 70% of the reference's coverage, penalized below that |
 | `key-terms`, `key-terms-names` | Share of the reference's key term renderings the hypothesis also uses (all terms, or proper names only) |
 | `perplexity`, `perplexity-one-sided` | Distance between the hypothesis's and the reference's character perplexity under a 5-gram model of the target language (one-sided: only being less predictable counts) |
-
 | `bt-nllb` | How much the hypothesis tells a reverse NLLB-200 model about the source (forced decoding, no generated back translation), relative to the reference. Verses whose reference tells the model little beyond what it predicts with no input (memorized from Bibles) get no score, and a hypothesis that copies the source gets no credit. Runs on the GPU; NaN for languages NLLB doesn't cover |
+| `bt-nllb-finetuned`, `bt-scratch` | The same with a reverse model trained per project for languages NLLB lacks: NLLB fine-tuned in the reverse direction, or a small transformer trained from scratch (which can't have memorized the scored verses). Trained on the GPU and cached under `data/models/reverse` |
 
-PLAN.md §2.2.2 records how each fares. On human judgments of news, none adds to chrF3, and coverage is kept only as an optional guard against loops and runaway output.
+PLAN.md §2.2.2 and the Phase 5 status in §2.3 record how each fares. On human judgments of news, none adds to chrF3: coverage and back-translation both reward literal translations there. On the Bible challenge set they catch the errors chrF3 misses (additions, repetition, copies).
 
 Fit the combined metric on human judgments (WMT MQM and DA), with in-domain training, and compare it with each feature alone at segment and system level. `--add` adds features to an existing score table:
 
@@ -166,6 +167,50 @@ Check whether back-translation scoring survives NLLB's memorization of the Bible
 uv run btmetric-memorization-gate
 ```
 
+## Combining features
+
+Fit the combined metric on the Bible challenge set's per-row scores (written by `btmetric-evaluate-challenge-set`), leaving one test set out, and compare it per error type with each feature alone. `--features` restricts the combination, e.g. to lexical features plus the coverage detectors as guards:
+
+```
+uv run btmetric-fit-combination
+uv run btmetric-fit-combination --features chrF3 m-chrF3 BLEU spBLEU perplexity-one-sided coverage-source-detector coverage-target-detector coverage-reference-detector
+```
+
+On WMT human judgments the fit samples at most 20,000 segment pairs per dataset (`--max-pairs-per-dataset`; 0 keeps all), since all pairs together exhausted memory.
+
+## Silver labels from xCOMET-XL
+
+Measure how often each feature ranks real Bible translations as xCOMET-XL does, on past system outputs whose source and target are both languages XLM-R can read. Three steps, so the GPU step stands alone:
+
+```
+uv run btmetric-silver-agreement select                                  # sample verses and every system's output
+uv run btmetric-silver-agreement score --features xcomet-xl xcomet-xl-qe # silver labels, on the GPU
+uv run btmetric-silver-agreement score --features chrf3 bleu             # features to compare
+uv run btmetric-silver-agreement agree                                   # pairwise agreement, within verses and per system
+```
+
+`xcomet-xl-qe` is xCOMET-XL without the reference, so its labels don't share the reference the metric scores against.
+
+## Significance thresholds
+
+How large a system-level difference must be before humans reliably agree with its direction, from the WMT MQM system pairs:
+
+```
+uv run btmetric-significance-thresholds
+```
+
+The human-translation test can also score with a different source text, e.g. Hebrew script where the experiment used a transliteration that back-translation models can't read:
+
+```
+uv run btmetric-test-human-translations --features bt-nllb --source-extract hbo-HEB --source-language he --strip-marks
+```
+
+## Running long jobs
+
+- **One GPU job at a time.** The machine crashed with several running at once. Chain GPU jobs in one command rather than starting them in parallel.
+- **COMET scores are cached** in `data/cache/comet_scores.sqlite` as each chunk is scored, and progress (segments done, rate, time left) is logged per chunk. A stopped run resumes where it left off.
+- **Tests on the CPU while the GPU is busy:** some tests train small models on CUDA, so run them with `CUDA_VISIBLE_DEVICES=-1`. On Windows an empty value does not hide the GPU.
+
 Generated and downloaded files go in `data/`, which is not committed.
 
 ## Layout
@@ -174,9 +219,10 @@ Generated and downloaded files go in `data/`, which is not committed.
 - `btmetric/scripture`: Scripture extracts and Paratext project metadata (back translation pairing, Bible corpora)
 - `btmetric/datasets`: downloading public human-judgment datasets
 - `btmetric/evaluation`: the common data model (evaluation sets, system outputs, human judgments) and its loaders
-- `btmetric/features`: the `Feature` interface, the baselines (chrF, BLEU, TER, COMET) and the metric features (alignment coverage, key terms, perplexity)
+- `btmetric/features`: the `Feature` interface, the baselines (chrF, BLEU, TER, COMET), the metric features (alignment coverage, key terms, perplexity, back-translation scoring), reverse models, and the in-domain training corpora
 - `btmetric/terms`: Major Biblical Terms, rendering and negation-word inference by alignment, and its validation
 - `btmetric/perturbations`: the perturbation library, challenge sets (synthetic and real errors) and calibration against real error rates
-- `btmetric/analysis`: failure-mode checks (other human translations) and baselines on past system pairs
+- `btmetric/combination`: the pairwise log-linear combination, fit on challenge-set rows or WMT human judgments
+- `btmetric/analysis`: failure-mode checks (other human translations, MQM error categories, the memorization gate), baselines on past system pairs, silver-label agreement and significance thresholds
 - `btmetric/meta_eval`: meta-evaluation statistics (pairwise accuracy, acc_eq with tie calibration, bootstrap intervals, paired bootstrap significance) and the runner
 - `tools/comet`: the separate environment and worker process for COMET models

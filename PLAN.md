@@ -794,18 +794,18 @@ Each experiment directory typically contains:
 
 ## 7. Phases
 
-| Phase | Work | Outputs |
-|---|---|---|
-| **1. Data and infrastructure** | Collect the §3.1 test sets; gather Bible corpora for each test-set language from eBible; rebuild the experiment index from `MT/experiments` and group experiments by shared test set (§6.2); pair human back-translations with their vernacular projects; build data loaders, the feature interface and the meta-evaluation harness on top of silnlp | Reproducible evaluation set; list of valid system pairs |
-| **2. Baselines** | Run the §3.4 baselines on everything, including the human-translation test from §3.3b | Baseline results; confirmation of chrF3's failure modes |
-| **3. Perturbation suite** | Implement perturbations that change meaning; calibrate their frequencies against real MT errors | Bible challenge set, plus the memorization gate |
-| **4. Features** | Implement chrF3, key terms, alignment coverage and perplexity ratio under low-resource constraints; ablate each against its full-resource version; drop features that add nothing | Core feature set with standalone correlations |
-| **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision |
-| **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings |
-| **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach |
-| **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines |
-| **9. Integration** | Add the metric as a silnlp scorer; optionally project it in quality estimation | Metric in production use |
-| **10. (Optional) Human check** | Small ranking or usability study on 1–2 minority languages, using `sample_usability.py` | Direct evidence on target-domain correlation |
+| Phase | Work | Outputs | Status (October 2026) |
+|---|---|---|---|
+| **1. Data and infrastructure** | Collect the §3.1 test sets; gather Bible corpora for each test-set language from eBible; rebuild the experiment index from `MT/experiments` and group experiments by shared test set (§6.2); pair human back-translations with their vernacular projects; build data loaders, the feature interface and the meta-evaluation harness on top of silnlp | Reproducible evaluation set; list of valid system pairs | **Done** |
+| **2. Baselines** | Run the §3.4 baselines on everything, including the human-translation test from §3.3b | Baseline results; confirmation of chrF3's failure modes | **Done** (TER skipped as too slow; LLM judge deferred) |
+| **3. Perturbation suite** | Implement perturbations that change meaning; calibrate their frequencies against real MT errors | Bible challenge set, plus the memorization gate | **Done**: synthetic and real-error challenge sets, severities, calibration, memorization gate |
+| **4. Features** | Implement chrF3, key terms, alignment coverage and perplexity ratio under low-resource constraints; ablate each against its full-resource version; drop features that add nothing | Core feature set with standalone correlations | **Mostly done**: coverage, key terms, perplexity, trained in-domain and tested on the challenge set and WMT; full-resource ablations not done |
+| **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision | **Partial**: reverse-NLLB scoring and the memorization gate done; fine-tuned and scratch reverse models written but not yet evaluated; LLM options and human back-translation validation not started |
+| **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings | **Partial**: xCOMET-XL silver labels on 162 past test sets being scored; Bible-only MT systems and quality ladders not trained |
+| **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set and WMT; guards tested. Normalization (§2.4), expert priors and per-language weights not started |
+| **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines | **Partial**: thresholds on WMT MQM; Bible-domain thresholds and reporting with the paired bootstrap pending |
+| **9. Integration** | Add the metric as a silnlp scorer; optionally project it in quality estimation | Metric in production use | Not started |
+| **10. (Optional) Human check** | Small ranking or usability study on 1–2 minority languages, using `sample_usability.py` | Direct evidence on target-domain correlation | Not started |
 
 ---
 
