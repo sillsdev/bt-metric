@@ -623,6 +623,29 @@ COMET-22 was trained on WMT 2017–20 direct-assessment data, so its scores on t
 - **Caveat: these are synthetic errors.** The combination is trained and tested on the same kinds of injected error, in held-out languages. That shows the features can catch these errors together, not that the combination tracks human judgments of quality.
 - **These weights conflict with the WMT fit** (§2.2.2). coverage-target gets the most weight here and none on news, where coverage is below chance because it rewards literal translations. Phase 7 has to resolve this: catch the Bible failures (additions, loops, copies) without rewarding literalness. One option is to use coverage and back-translation only as guards that penalize gross deviations, as the detector variants do, while chrF3-like features carry the general quality signal. The §3.3c silver labels on real Bible output in major languages are the evidence for choosing.
 
+**Guards: a first test** (October 2026). Feature sets were compared on the challenge set (leave one test set out) and on the WMT human judgments. "Guards" replace continuous coverage with the coverage detectors, which react only when the hypothesis keeps under 70% of the reference's coverage.
+
+| Feature set | Challenge set mean | WMT segment level vs. chrF3 | WMT system level (MQM) |
+|---|---|---|---|
+| chrF3 alone | 0.868 | — | 0.747 |
+| lexical (chrF3, m-chrF3, BLEU, spBLEU; on WMT chrF3 + BLEU) | 0.921 | equal | 0.755 |
+| guards (lexical + one-sided perplexity + 3 detectors) | 0.936 | equal or +0.001 to +0.004 | 0.758 |
+| all features | 0.953 | about equal | 0.719 |
+
+Fitted separately on each domain, the guard set helps on the Bible (additions 0.91, vs. 0.49 for chrF3) without hurting news. But a metric needs **one** set of weights. Weights fit on the Bible challenge set and applied unchanged to WMT lose ground on news:
+
+| Bible-fit weights applied to WMT | WMT segment level vs. chrF3 | WMT system level |
+|---|---|---|
+| chrF3 + BLEU + one-sided perplexity + 3 detectors | −0.002 to −0.013 | 0.723 |
+| chrF3 + 3 detectors | −0.001 to −0.010 | 0.711 |
+
+- **The detectors are not harmless on news.** They fire often enough there to penalize the freer translations human raters prefer: the literalness problem in a milder form. Fit on news, they get almost no weight, so the two domains genuinely disagree about these features.
+- The losses are modest, with confidence intervals overlapping chrF3's, but consistent across every collection.
+- **Options:**
+  - treat the Bible as the target and news as a sanity check, accepting a few points on news
+  - make the guards stricter, firing only on gross failures such as coverage under 50% of the reference's
+  - let the §3.3c silver labels decide which combination agrees best with xCOMET-XL on real Bible output
+
 ### 4.2 Expert priors and blending
 
 Compare three sources of weights:
