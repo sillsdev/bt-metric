@@ -11,19 +11,26 @@ import pandas as pd
 from scipy.optimize import minimize
 
 
+def _spread(values: pd.Series) -> float:
+    spread = values.std()
+    return float(spread) if spread > 0 else 1.0
+
+
 class PerGroupScale:
     """Scales each feature by its standard deviation within a group (a test set or language), so a weight means the
     same thing everywhere. Only the scale matters for pairwise differences; any per-group offset cancels."""
 
-    def __init__(self) -> None:
+    def __init__(self, pooled: Sequence[str] = ()) -> None:
+        # Features scaled by their spread over all groups instead. An error detector is 0 for most segments, so
+        # within a group where it rarely fires its spread is tiny and the few non-zero values would be blown up.
+        self._pooled = set(pooled)
         self._scales: Dict[str, Dict[str, float]] = {}
 
     def fit(self, values: pd.DataFrame, groups: Sequence[str], features: List[str]) -> "PerGroupScale":
         frame = values[features].assign(_group=list(groups))
+        overall = {feature: _spread(frame[feature]) for feature in features if feature in self._pooled}
         for group, rows in frame.groupby("_group"):
-            self._scales[str(group)] = {
-                feature: float(rows[feature].std()) if rows[feature].std() > 0 else 1.0 for feature in features
-            }
+            self._scales[str(group)] = {feature: overall.get(feature) or _spread(rows[feature]) for feature in features}
         return self
 
     def apply(self, deltas: pd.DataFrame, groups: Sequence[str], features: List[str]) -> np.ndarray:

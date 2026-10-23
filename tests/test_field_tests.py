@@ -90,3 +90,13 @@ def test_metric_agreement_with_preferences_per_verse_and_per_comparison():
     assert verse_preferences(rows, "metric").accuracy() == 1.0
     [summary] = comparison_preferences(rows, "metric").to_dict("records")
     assert summary["verses"] == 3 and summary["human_margin"] == 0.0
+
+
+def test_a_team_trialled_separately_uses_its_own_cutoff(tmp_path: Path):
+    (tmp_path / "vref.txt").write_text("MRK 1:1\n", encoding="utf-8")
+    (tmp_path / "xyz-P_2025_06_01.txt").write_text("one\n", encoding="utf-8")
+    table = pd.DataFrame(
+        {"trial": "nt_field_test", "target_extract": "xyz-P", "vref": "MRK 1:1", "trial_start": ["", "2025-05-01"]}
+    )
+    table = attach_references(table, [tmp_path], tmp_path / "vref.txt")
+    assert table["independent_reference"].tolist() == [True, False]

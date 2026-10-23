@@ -63,7 +63,9 @@ BOOKS = {
 _DRAFT = re.compile(r"^(draft|draf|ebauche|ébauche|verset traduit|ai draft)\b", re.IGNORECASE)
 _DRAFT_A = re.compile(r"^(draft|draf|ebauche|ébauche) a$", re.IGNORECASE)
 _DRAFT_B = re.compile(r"^(draft|draf|ebauche|ébauche) b$", re.IGNORECASE)
-_RESPONSE = re.compile(r"^(response|tanggapan|réponse|corriger / recommencer|can the ai draft help)", re.IGNORECASE)
+_RESPONSE = re.compile(
+    r"^(response|tanggapan|réponse|corriger / recommencer|correct / start over|can the ai draft help)", re.IGNORECASE
+)
 _CORRECTION = re.compile(r"^(correction|koreksi)$", re.IGNORECASE)
 _HUMAN = re.compile(r"^human translation$", re.IGNORECASE)
 _REFERENCE = re.compile(r"^\s*(\d?\s?[^\d\s:]+)\s+(\d+)(?::(\d+)(?:\s*-\s*(\d+))?)?")
@@ -104,6 +106,8 @@ class Team:
     language: str
     target_extract: str
     source_extract: str
+    # For teams trialled apart from the rest of their trial; otherwise TRIAL_STARTS applies.
+    trial_start: str = ""
 
 
 class FieldTestTeams:
@@ -112,7 +116,7 @@ class FieldTestTeams:
 
     @classmethod
     def load(cls) -> "FieldTestTeams":
-        table = pd.read_csv(Path(__file__).with_name("field_test_teams.tsv"), sep="\t")
+        table = pd.read_csv(Path(__file__).with_name("field_test_teams.tsv"), sep="\t", dtype=str).fillna("")
         return cls([Team(**row) for row in table.to_dict("records")])
 
     def for_path(self, path: Path) -> Optional[Team]:
@@ -281,6 +285,7 @@ def collect(root: Path, teams: FieldTestTeams) -> pd.DataFrame:
                     language=team.language,
                     target_extract=team.target_extract,
                     source_extract=team.source_extract,
+                    trial_start=team.trial_start,
                     workbook=relative,
                     sheet=sheet,
                     kind=kind,
@@ -337,6 +342,8 @@ def attach_references(table: pd.DataFrame, scripture_dirs: Iterable[Path], vref_
         first_seen.append(next((date for date, _, lines in versions if text(lines)), "") if latest else "")
     table = table.assign(reference=references, reference_extract=extracts, reference_first_seen=first_seen)
     starts = table["trial"].map(TRIAL_STARTS)
+    if "trial_start" in table:
+        starts = table["trial_start"].where(table["trial_start"] != "", starts)
     return table.assign(
         independent_reference=(table["reference_first_seen"] != "") & (table["reference_first_seen"] < starts)
     )
