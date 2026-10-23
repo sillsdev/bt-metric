@@ -1,5 +1,6 @@
 from pathlib import Path
 
+import numpy as np
 import openpyxl
 import pandas as pd
 
@@ -100,3 +101,53 @@ def test_a_team_trialled_separately_uses_its_own_cutoff(tmp_path: Path):
     )
     table = attach_references(table, [tmp_path], tmp_path / "vref.txt")
     assert table["independent_reference"].tolist() == [True, False]
+
+
+def test_compiled_verse_analyses_are_read_per_verse_with_good_answers_as_one(tmp_path: Path):
+    from btmetric.datasets.field_tests import read_verse_analyses
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(["", "", "Team 16", "", ""])
+    sheet.append(["", "", "MAT 9:26-34", "", "MAT 23:16-28"])
+    sheet.append(["", "", 26, 27, 16])
+    sheet.append(["General Observations", "Hard to read aloud?", "Y", "N", "N"])
+    sheet.append(["", "Confusing?", "x", "N", "Y"])
+    sheet.append(["", "Same basic meaning?", "A", "D", "A"])
+    sheet.append(["", "Clear?", "A", "D", "D"])
+    sheet.append(["", "Sounds right?", "D", "A", "A"])
+    sheet.append(["Error types", "7. missing word", 1, None, None])
+    sheet.append(["Score", "Score out of 100", 90, 30, 60])
+    sheet.append(["Correlation", "vs.", "All scores"])
+    sheet.append(["", "Score", 0.5, None, None])
+    path = tmp_path / "Compile Feedback.xlsx"
+    workbook.save(path)
+    table = read_verse_analyses(path).set_index("vref")
+    assert table.index.tolist() == ["MAT 9:26", "MAT 9:27", "MAT 23:16"]
+    assert table["not_hard_to_read"].tolist() == [0.0, 1.0, 1.0]
+    assert np.isnan(table.loc["MAT 9:26", "not_confusing"])
+    assert table["same_meaning"].tolist() == [1.0, 0.0, 1.0]
+    assert table["error_missing_word"].tolist() == [1.0, 0.0, 0.0]
+    assert table["score"].tolist() == [90.0, 30.0, 60.0]
+
+
+def test_passage_tables_give_each_verse_its_source_and_draft(tmp_path: Path):
+    from btmetric.datasets.field_tests import read_passage_texts
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = "Verse Analysis & Correction"
+    sheet.append(["MAT 9:26-34", "CHLNBT", "Team 12 Draft"])
+    sheet.append([26, "source 26", "draft 26"])
+    sheet.append([27, "source 27", "draft 27"])
+    sheet.append([])
+    sheet.append(["MAT 23:16-28", "CHLNBT", "Team 12 Draft"])
+    sheet.append([16, "source 16", "draft 16"])
+    path = tmp_path / "Verse Selections.xlsx"
+    workbook.save(path)
+    table = read_passage_texts(path)
+    assert table.values.tolist() == [
+        ["MAT 9:26", "source 26", "draft 26"],
+        ["MAT 9:27", "source 27", "draft 27"],
+        ["MAT 23:16", "source 16", "draft 16"],
+    ]

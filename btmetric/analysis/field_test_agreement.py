@@ -18,6 +18,7 @@ from typing import List
 import numpy as np
 import pandas as pd
 
+from ..datasets.field_tests import ANALYSIS_LABELS
 from ..meta_eval.agreement import PairwiseAgreement
 from ..meta_eval.runner import FeatureRegistry
 from .silver_agreement import SilverTable
@@ -98,6 +99,31 @@ def usability_pairs(rows: pd.DataFrame, metric: str, kind: str) -> PairwiseAgree
     )
 
 
+def analysis_report(rows: pd.DataFrame, judgments: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
+    """For each verse-analysis criterion: within each team, over every two analysed drafts the team rated
+    differently, how often the metric scores the better-rated one higher. A marked error type and a larger edit
+    proportion count as worse. The "pairs" rows give how many decided pairs each accuracy rests on."""
+    labels = judgments.loc[judgments["kind"] == "analysis", ["item"] + ANALYSIS_LABELS]
+    worse_when_higher = [label for label in ANALYSIS_LABELS if label.startswith("error_") or label == "edit_proportion"]
+    labels[worse_when_higher] = -labels[worse_when_higher]
+    analysed = rows[rows["kind"] == "analysis"].merge(labels, on="item")
+    records = []
+    for references, subset in [("independent", analysed[analysed["independent"]]), ("all", analysed)]:
+        pairs = {"metric": "pairs", "references": references, "verses": len(subset)}
+        for metric in metrics:
+            record = {"metric": metric, "references": references, "verses": int(subset[metric].notna().sum())}
+            for label in ANALYSIS_LABELS:
+                scored = subset[subset[metric].notna() & subset[label].notna()]
+                agreement = PairwiseAgreement.pooled(
+                    [PairwiseAgreement.all_pairs(p[label], p[metric]) for _, p in scored.groupby("team")]
+                )
+                record[label] = agreement.accuracy()
+                pairs[label] = max(pairs.get(label, 0), agreement.decided_pairs())
+            records.append(record)
+        records.append(pairs)
+    return pd.DataFrame(records)
+
+
 def agreement_report(rows: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
     """Over all references, and over only those written before the trial (see field_tests.TRIAL_STARTS)."""
     return pd.concat(
@@ -164,6 +190,10 @@ def main() -> None:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         report.to_csv(args.output, sep="\t", index=False)
         LOGGER.info(f"Agreement with the field-test judgments:\n{report.round(3).to_string(index=False)}")
+        judgments = pd.read_csv(args.judgments, sep="\t", low_memory=False).assign(item=lambda t: range(len(t)))
+        analyses = analysis_report(rows, judgments, metrics)
+        analyses.to_csv(args.output.with_name(args.output.stem + "_analysis.tsv"), sep="\t", index=False)
+        LOGGER.info(f"Agreement with the verse analyses:\n{analyses.round(3).to_string(index=False)}")
 
 
 if __name__ == "__main__":

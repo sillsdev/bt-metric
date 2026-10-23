@@ -44,6 +44,10 @@ class PairwiseAgreement:
     def __len__(self) -> int:
         return len(self._gold)
 
+    def decided_pairs(self) -> int:
+        """Pairs the gold standard doesn't tie, which are the ones accuracy() counts."""
+        return int(np.count_nonzero(self._gold))
+
     def accuracy(self) -> float:
         """Pairwise accuracy (Kocmi et al. 2021): pairs with a gold tie are skipped, metric ties count as wrong."""
         decided = self._gold != 0
