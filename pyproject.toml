@@ -33,6 +33,7 @@ btmetric-fit-combination = "btmetric.combination.challenge:main"
 btmetric-fit-combination-human = "btmetric.combination.human:main"
 btmetric-check-mqm-error-categories = "btmetric.analysis.mqm_error_categories:main"
 btmetric-memorization-gate = "btmetric.analysis.memorization_gate:main"
+btmetric-silver-agreement = "btmetric.analysis.silver_agreement:main"
 
 [dependency-groups]
 dev = [

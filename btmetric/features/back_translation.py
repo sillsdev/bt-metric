@@ -124,7 +124,9 @@ def load_seq2seq(path: str):
     import torch
     from transformers import AutoModelForSeq2SeqLM
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # device_count rather than is_available: with CUDA_VISIBLE_DEVICES empty, PyTorch on Windows reports CUDA as
+    # available but has no device to use.
+    device = "cuda" if torch.cuda.device_count() > 0 else "cpu"
     dtype = torch.float16 if device == "cuda" else torch.float32
     LOGGER.info(f"Loading {path} on {device}")
     return AutoModelForSeq2SeqLM.from_pretrained(path, dtype=dtype).to(device).eval()

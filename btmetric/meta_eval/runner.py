@@ -180,6 +180,8 @@ class FeatureRegistry:
             "africomet": lambda: Comet("AfriCOMET", "masakhane/africomet-stl-1.1"),
             # Gated on Hugging Face. XXL is left out: COMET loads models in fp32, and 10.7B parameters need ~43 GB.
             "xcomet-xl": lambda: Comet("xCOMET-XL", "Unbabel/XCOMET-XL", batch_size=16),
+            # The same model without the reference (quality estimation), so its labels do not share our reference.
+            "xcomet-xl-qe": lambda: Comet("xCOMET-XL-QE", "Unbabel/XCOMET-XL", uses_reference=False, batch_size=16),
             "coverage-source": lambda: AlignmentCoverage("source", aligners=self._aligners),
             "coverage-target": lambda: AlignmentCoverage("target", aligners=self._aligners),
             "key-terms": lambda: KeyTermAccuracy(renderings=self._renderings),
@@ -210,6 +212,7 @@ class FeatureRegistry:
             "comet22",
             "africomet",
             "xcomet-xl",
+            "xcomet-xl-qe",
             "coverage-source",
             "coverage-target",
             "key-terms",

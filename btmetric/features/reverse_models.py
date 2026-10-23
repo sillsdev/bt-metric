@@ -10,6 +10,7 @@ Two kinds, trained on the project's own Bible minus the verses about to be score
 Trained models are cached under data/models/reverse, keyed by the training text and settings.
 """
 
+import contextlib
 import hashlib
 import json
 import logging
@@ -72,7 +73,13 @@ def train_seq2seq(
         for b in rng.permutation(len(batches)):
             batch = encode([inputs[i] for i in batches[b]], [outputs[i] for i in batches[b]])
             labels = batch.pop("labels")
-            with torch.autocast(device_type=model.device.type, dtype=torch.bfloat16):
+            # bf16 autocast only on the GPU: on the CPU it is slow, and with CUDA hidden it fails checking for a GPU.
+            precision = (
+                torch.autocast(device_type="cuda", dtype=torch.bfloat16)
+                if model.device.type == "cuda"
+                else contextlib.nullcontext()
+            )
+            with precision:
                 logits = model(**batch, labels=labels).logits
             loss = loss_function(logits.float().view(-1, logits.size(-1)), labels.view(-1))
             loss.backward()
@@ -165,7 +172,7 @@ class FineTunedNllb(TrainedReverseModels):
             # A new tag starts as the average language tag rather than at random.
             embeddings[tokenizer.convert_tokens_to_ids(new_codes)] = embeddings[known_ids].mean(dim=0)
         model.gradient_checkpointing_enable()
-        model.to("cuda" if torch.cuda.is_available() else "cpu")
+        model.to("cuda" if torch.cuda.device_count() > 0 else "cpu")
         tokenizer.src_lang, tokenizer.tgt_lang = input_code, output_code
 
         def encode(inputs: List[str], outputs: List[str]) -> dict:
@@ -289,7 +296,7 @@ class ScratchReverseModel(TrainedReverseModels):
             share_encoder_decoder_embeddings=True,
         )
         torch.manual_seed(self._settings.seed)
-        model = MarianMTModel(config).to("cuda" if torch.cuda.is_available() else "cpu")
+        model = MarianMTModel(config).to("cuda" if torch.cuda.device_count() > 0 else "cpu")
 
         def encode(inputs: List[str], outputs: List[str]) -> dict:
             encoded = encode_pieces(processor, inputs, outputs, self._settings.max_length, model.device)
