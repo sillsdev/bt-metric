@@ -2,24 +2,21 @@
 source accounts for.
 
 Unaligned source words point to omissions; unaligned hypothesis words to additions, repetition or untranslated
-text. Aligners are trained only on Bible text (PLAN.md 3.2), with symmetrized Thot eflomal. Each score is relative
-to the reference's coverage under the same aligner, which cancels out a weak aligner and how differently the two
-languages express things.
+text. Aligners are symmetrized Thot eflomal models trained on a small amount of text in the domain being scored
+(corpora.py). Each score is relative to the reference's coverage under the same aligner, which cancels out a weak
+aligner and how differently the two languages express things.
 """
 
 import logging
-from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 import numpy as np
-import pandas as pd
 from machine.tokenization import LatinWordTokenizer
 from machine.translation.thot import ThotSymmetrizedWordAlignmentModel
 
-from ..scripture.corpora import EvaluationLanguages
 from ..terms.inference import AlignedVerses
 from .base import Feature
+from .corpora import BibleCorpus, ParallelText, TrainingCorpus
 
 LOGGER = logging.getLogger(__name__)
 
@@ -43,63 +40,27 @@ class Tokenizer:
         return [token.lower() for token in self._words.tokenize(text)]
 
 
-@dataclass(frozen=True)
-class BibleResources:
-    """Where Bible-only training text comes from. A language is either an extract name ("qaa-ABC_2024_04_22") or an
-    ISO code, which resolves to the extract btmetric-find-bible-corpora selected for it."""
-
-    scripture_dirs: Tuple[Path, ...] = (Path("M:/MT/scripture"), Path("M:/eBible/MT/scripture"))
-    corpora_table: Path = Path("data/bible_corpora.tsv")
-    vref_path: Path = Path("../silnlp/silnlp/assets/vref.txt")
-
-    def extract_path(self, language: str) -> Optional[Path]:
-        # Experiment configs don't always name an extract exactly as it is stored: some add a suffix
-        # ("qac-ABCD-QAC" for qac-ABCD.txt) and many extracts carry a date ("qab-XYZ_2023_08_22.txt").
-        parts = language.split("-")
-        names = ["-".join(parts[:end]) for end in range(len(parts), 1, -1)]
-        for name in names:
-            for directory in self.scripture_dirs:
-                if (directory / f"{name}.txt").is_file():
-                    return directory / f"{name}.txt"
-                dated = sorted(directory.glob(f"{name}_20*.txt"))
-                if dated:
-                    return dated[-1]
-        code = language.split("-")[0]
-        evaluation_language = EvaluationLanguages.load().language_for_code(code)
-        if evaluation_language is None or not self.corpora_table.is_file():
-            return None
-        table = pd.read_csv(self.corpora_table, sep="\t")
-        selected = table[(table["language"] == evaluation_language) & table["selected"]]
-        return Path(selected["path"].iloc[0]) if not selected.empty else None
-
-
-class BibleAligner:
-    """A symmetrized eflomal model trained on two verse-aligned Bible extracts, for aligning new sentence pairs."""
+class WordAligner:
+    """A symmetrized eflomal model trained on parallel text, for aligning new sentence pairs."""
 
     def __init__(self, model: ThotSymmetrizedWordAlignmentModel, source: Tokenizer, target: Tokenizer) -> None:
         self._model = model
         self._source = source
         self._target = target
+        self._memo: Dict[Tuple[str, str], Tuple[List[Tuple[int, int, float]], int, int]] = {}
 
     @classmethod
-    def train(
-        cls, source_path: Path, target_path: Path, resources: BibleResources, excluded_vrefs: FrozenSet[str]
-    ) -> Optional["BibleAligner"]:
-        vrefs = resources.vref_path.read_text(encoding="utf-8").splitlines()
-        source_lines = source_path.read_text(encoding="utf-8-sig").splitlines()
-        target_lines = target_path.read_text(encoding="utf-8-sig").splitlines()
-        source_tokenizer, target_tokenizer = Tokenizer.for_corpus(source_lines), Tokenizer.for_corpus(target_lines)
+    def train(cls, text: ParallelText, min_pairs: int = 500) -> Optional["WordAligner"]:
+        source_tokenizer, target_tokenizer = Tokenizer.for_corpus(text.source), Tokenizer.for_corpus(text.target)
         verses = AlignedVerses([], [], [])
-        for vref, source, target in zip(vrefs, source_lines, target_lines):
-            source, target = source.strip(), target.strip()
-            if source and target and "<range>" not in (source, target) and vref not in excluded_vrefs:
-                verses.vrefs.append(vref)
-                verses.english.append(source_tokenizer.tokenize(source))
-                verses.target.append(target_tokenizer.tokenize(target))
-        if len(verses.vrefs) < 1000:
-            LOGGER.warning(f"Only {len(verses.vrefs)} shared verses in {source_path.name}, {target_path.name}")
+        for i, (source, target) in enumerate(zip(text.source, text.target)):
+            verses.vrefs.append(str(i))
+            verses.english.append(source_tokenizer.tokenize(source))
+            verses.target.append(target_tokenizer.tokenize(target))
+        if len(verses.vrefs) < min_pairs:
+            LOGGER.warning(f"Only {len(verses.vrefs)} segment pairs for {text.key}")
             return None
-        LOGGER.info(f"Training eflomal on {len(verses.vrefs)} verses of {source_path.stem} / {target_path.stem}")
+        LOGGER.info(f"Training eflomal on {len(verses.vrefs)} segment pairs ({text.key})")
         return cls(verses.trained_model(), source_tokenizer, target_tokenizer)
 
     def coverage(
@@ -111,58 +72,108 @@ class BibleAligner:
         only because the aligner must align something (an untranslated copy of the source, say) counts for
         little. Unweighted, a token counts fully if it is aligned at all.
         """
-        pairs = [(self._source.tokenize(s), self._target.tokenize(t)) for s, t in zip(sources, targets)]
-        word_pairs_batch = self._model.get_best_aligned_word_pairs_batch(pairs)
         source_coverage, target_coverage = [], []
-        for (source_tokens, target_tokens), word_pairs in zip(pairs, word_pairs_batch):
+        for source_best, target_best, source_length, target_length in self._best_scores(sources, targets, weighted):
+            source_coverage.append(sum(source_best.values()) / source_length if source_length else 0.0)
+            target_coverage.append(sum(target_best.values()) / target_length if target_length else 0.0)
+        return np.array(source_coverage), np.array(target_coverage)
+
+    def source_profiles(self, sources: Sequence[str], targets: Sequence[str]) -> List[Dict[int, float]]:
+        """Per pair: each aligned source token's best translation probability."""
+        return [source_best for source_best, _, _, _ in self._best_scores(sources, targets, weighted=True)]
+
+    def _best_scores(
+        self, sources: Sequence[str], targets: Sequence[str], weighted: bool
+    ) -> List[Tuple[Dict[int, float], Dict[int, float], int, int]]:
+        alignments = self._aligned(sources, targets)
+        results = []
+        for word_pairs, source_length, target_length in alignments:
             source_best: Dict[int, float] = {}
             target_best: Dict[int, float] = {}
-            for pair in word_pairs:
-                if pair.source_index < 0 or pair.target_index < 0:
-                    continue
-                score = pair.translation_score if weighted else 1.0
-                source_best[pair.source_index] = max(source_best.get(pair.source_index, 0.0), score)
-                target_best[pair.target_index] = max(target_best.get(pair.target_index, 0.0), score)
-            source_coverage.append(sum(source_best.values()) / len(source_tokens) if source_tokens else 0.0)
-            target_coverage.append(sum(target_best.values()) / len(target_tokens) if target_tokens else 0.0)
-        return np.array(source_coverage), np.array(target_coverage)
+            for source_index, target_index, translation_score in word_pairs:
+                score = translation_score if weighted else 1.0
+                source_best[source_index] = max(source_best.get(source_index, 0.0), score)
+                target_best[target_index] = max(target_best.get(target_index, 0.0), score)
+            results.append((source_best, target_best, source_length, target_length))
+        return results
+
+    def _aligned(
+        self, sources: Sequence[str], targets: Sequence[str]
+    ) -> List[Tuple[List[Tuple[int, int, float]], int, int]]:
+        """Aligned word pairs with translation scores, memoized: the same source-reference pair is aligned for every
+        system scored against it and for every coverage feature."""
+        missing = list(dict.fromkeys(pair for pair in zip(sources, targets) if pair not in self._memo))
+        if missing:
+            tokenized = [(self._source.tokenize(s), self._target.tokenize(t)) for s, t in missing]
+            for pair, (source_tokens, target_tokens), word_pairs in zip(
+                missing, tokenized, self._model.get_best_aligned_word_pairs_batch(tokenized)
+            ):
+                kept = [
+                    (p.source_index, p.target_index, p.translation_score)
+                    for p in word_pairs
+                    if p.source_index >= 0 and p.target_index >= 0
+                ]
+                self._memo[pair] = (kept, len(source_tokens), len(target_tokens))
+        return [self._memo[pair] for pair in zip(sources, targets)]
 
 
 class AlignerCache:
-    """Bible aligners by language pair and excluded verses, shared by the source- and target-side coverage
-    features so each pair is trained once."""
+    """Aligners by the training text they were trained on, shared by the coverage features so each is trained once.
 
-    def __init__(self, resources: Optional[BibleResources] = None) -> None:
-        self._resources = resources or BibleResources()
-        self._aligners: Dict[Tuple[str, str, FrozenSet[str]], Optional[BibleAligner]] = {}
+    Keyed by the corpus's description of its text, so two calls that would train on the same text (e.g. a news
+    sample whatever segments are excluded) share one aligner.
+    """
 
-    def get(self, source_language: str, target_language: str, excluded: FrozenSet[str]) -> Optional[BibleAligner]:
-        key = (source_language, target_language, excluded)
-        if key not in self._aligners:
-            source_path = self._resources.extract_path(source_language)
-            target_path = self._resources.extract_path(target_language)
-            if source_path is None or target_path is None:
-                LOGGER.warning(f"No Bible text for {source_language} or {target_language}; coverage scores are NaN")
-                self._aligners[key] = None
-            else:
-                self._aligners[key] = BibleAligner.train(source_path, target_path, self._resources, excluded)
-        return self._aligners[key]
+    def __init__(self, corpus: Optional[TrainingCorpus] = None) -> None:
+        self._corpus = corpus or BibleCorpus()
+        self._aligners: Dict[str, Optional[WordAligner]] = {}
+        self._keys: Dict[Tuple[str, str, FrozenSet[str]], Optional[str]] = {}
+
+    def get(self, source_language: str, target_language: str, excluded: FrozenSet[str]) -> Optional[WordAligner]:
+        request = (source_language, target_language, excluded)
+        if request not in self._keys:
+            text = self._corpus.parallel(source_language, target_language, excluded)
+            self._keys[request] = text.key if text else None
+            if text and text.key not in self._aligners:
+                self._aligners[text.key] = WordAligner.train(text)
+        key = self._keys[request]
+        return self._aligners[key] if key else None
+
+
+def deficit_penalty(ratio: np.ndarray, tolerance: float) -> np.ndarray:
+    """0 while the hypothesis keeps at least (1 - tolerance) of the reference's coverage, then the shortfall beyond
+    that as a penalty.
+
+    Used as an error detector: within the normal range, more coverage only means following the source more
+    literally, which human judgments don't reward (PLAN.md 2.2.2), so only gross shortfalls (dropped clauses,
+    inserted passages, loops) count.
+    """
+    return -np.maximum(0.0, (1.0 - ratio) - tolerance)
 
 
 class AlignmentCoverage(Feature):
-    """Source coverage ("source", omissions) or hypothesis coverage ("target", additions), minus the reference's."""
+    """Source coverage ("source", omissions) or hypothesis coverage ("target", additions), minus the reference's.
+
+    With a detector tolerance, the score is instead deficit_penalty of the hypothesis's coverage as a ratio of the
+    reference's.
+    """
 
     criterion = "accuracy"
 
     def __init__(
-        self, side: str, resources: Optional[BibleResources] = None, aligners: Optional[AlignerCache] = None
+        self,
+        side: str,
+        corpus: Optional[TrainingCorpus] = None,
+        aligners: Optional[AlignerCache] = None,
+        detector_tolerance: Optional[float] = None,
     ) -> None:
         if side not in ("source", "target"):
             raise ValueError(f"Unknown coverage side {side!r}.")
-        self.name = f"coverage-{side}"
+        self.name = f"coverage-{side}" + ("-detector" if detector_tolerance is not None else "")
         self._side = side
-        self._aligners = aligners or AlignerCache(resources)
-        self._aligner: Optional[BibleAligner] = None
+        self._detector_tolerance = detector_tolerance
+        self._aligners = aligners or AlignerCache(corpus)
+        self._aligner: Optional[WordAligner] = None
 
     def prepare(
         self, source_language: str, target_language: str, excluded_segments: FrozenSet[str] = frozenset()
@@ -177,4 +188,53 @@ class AlignmentCoverage(Feature):
         side = 0 if self._side == "source" else 1
         hypothesis_coverage = self._aligner.coverage(sources, hypotheses)[side]
         reference_coverage = self._aligner.coverage(sources, references)[side]
-        return hypothesis_coverage - reference_coverage
+        if self._detector_tolerance is None:
+            return hypothesis_coverage - reference_coverage
+        with np.errstate(divide="ignore", invalid="ignore"):
+            ratio = np.where(reference_coverage > 0, hypothesis_coverage / reference_coverage, np.nan)
+        return deficit_penalty(ratio, self._detector_tolerance)
+
+
+class ReferenceAnchoredCoverage(Feature):
+    """Omissions measured only against what the reference expresses.
+
+    Plain source coverage rewards literal translation: a meaning-based translation restructures the source and
+    leaves source words unaligned, so it scores low even when nothing is missing. Here a source word counts only
+    as far as the reference expresses it, and the score is the share of that the hypothesis also expresses. The
+    hypothesis is never asked to be more literal than the reference.
+    """
+
+    criterion = "accuracy"
+
+    def __init__(
+        self,
+        corpus: Optional[TrainingCorpus] = None,
+        aligners: Optional[AlignerCache] = None,
+        detector_tolerance: Optional[float] = None,
+    ) -> None:
+        self.name = "coverage-reference" + ("-detector" if detector_tolerance is not None else "")
+        self._detector_tolerance = detector_tolerance
+        self._aligners = aligners or AlignerCache(corpus)
+        self._aligner: Optional[WordAligner] = None
+
+    def prepare(
+        self, source_language: str, target_language: str, excluded_segments: FrozenSet[str] = frozenset()
+    ) -> None:
+        self._aligner = self._aligners.get(source_language, target_language, excluded_segments)
+
+    def segment_scores(
+        self, sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]
+    ) -> np.ndarray:
+        if self._aligner is None:
+            return np.full(len(hypotheses), np.nan)
+        scores = []
+        reference_profiles = self._aligner.source_profiles(sources, references)
+        hypothesis_profiles = self._aligner.source_profiles(sources, hypotheses)
+        for expressed, covered in zip(reference_profiles, hypothesis_profiles):
+            total = sum(expressed.values())
+            kept = sum(min(covered.get(i, 0.0), weight) for i, weight in expressed.items())
+            scores.append(kept / total if total > 0 else np.nan)
+        kept_share = np.array(scores)
+        if self._detector_tolerance is None:
+            return kept_share
+        return deficit_penalty(kept_share, self._detector_tolerance)

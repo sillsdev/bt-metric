@@ -13,13 +13,14 @@ from scipy.stats import kendalltau
 
 from ..evaluation.data import JudgedOutputs, SegmentJudgments
 from ..evaluation.loaders import AfriMteLoader, WmtDaLoader, WmtMqmLoader
-from ..features.alignment import AlignerCache, AlignmentCoverage
+from ..features.alignment import AlignerCache, AlignmentCoverage, ReferenceAnchoredCoverage
 from ..features.base import Feature
 from ..features.chrf import ChrF
 from ..features.comet import Comet
+from ..features.corpora import BibleCorpus, TrainingCorpus
 from ..features.key_terms import InferredRenderings, KeyTermAccuracy
 from ..features.lexical import Bleu, MeanChrF, NegativeTer
-from ..features.naturalness import PerplexityRatio
+from ..features.naturalness import CharNgramModel, PerplexityRatio
 from .agreement import PairwiseAgreement
 
 LOGGER = logging.getLogger(__name__)
@@ -157,10 +158,14 @@ class ResultsFile:
 class FeatureRegistry:
     """Features by name, built on first use: some load models or download tokenizers when constructed."""
 
-    def __init__(self) -> None:
+    def __init__(self, corpus: Optional[TrainingCorpus] = None) -> None:
+        """corpus: the training text for features that train models, in the domain being scored (Bible by default;
+        news for WMT). Key terms always use Bible text, since they rely on verse references."""
+        corpus = corpus or BibleCorpus()
         # Shared so that related features train each language's models once between them.
-        self._aligners = AlignerCache()
+        self._aligners = AlignerCache(corpus)
         self._renderings = InferredRenderings()
+        self._language_models: Dict[str, CharNgramModel] = {}
         self._factories: Dict[str, Callable[[], Feature]] = {
             "chrf3": lambda: ChrF(0),
             "chrf3++": lambda: ChrF(2),
@@ -176,7 +181,20 @@ class FeatureRegistry:
             "coverage-target": lambda: AlignmentCoverage("target", aligners=self._aligners),
             "key-terms": lambda: KeyTermAccuracy(renderings=self._renderings),
             "key-terms-names": lambda: KeyTermAccuracy(categories=frozenset({"PN"}), renderings=self._renderings),
-            "perplexity": PerplexityRatio,
+            "perplexity": lambda: PerplexityRatio(corpus=corpus, models=self._language_models),
+            "perplexity-one-sided": lambda: PerplexityRatio(
+                corpus=corpus, one_sided=True, models=self._language_models
+            ),
+            "coverage-reference": lambda: ReferenceAnchoredCoverage(aligners=self._aligners),
+            "coverage-source-detector": lambda: AlignmentCoverage(
+                "source", aligners=self._aligners, detector_tolerance=0.3
+            ),
+            "coverage-target-detector": lambda: AlignmentCoverage(
+                "target", aligners=self._aligners, detector_tolerance=0.3
+            ),
+            "coverage-reference-detector": lambda: ReferenceAnchoredCoverage(
+                aligners=self._aligners, detector_tolerance=0.3
+            ),
         }
         # Run only when asked for: neural features need a GPU; sacrebleu's TER is pure Python and takes over an hour
         # on the WMT sets while ranking almost exactly like chrF and BLEU; coverage trains an aligner per language
@@ -191,6 +209,11 @@ class FeatureRegistry:
             "key-terms",
             "key-terms-names",
             "perplexity",
+            "perplexity-one-sided",
+            "coverage-reference",
+            "coverage-source-detector",
+            "coverage-target-detector",
+            "coverage-reference-detector",
         }
 
     def names(self) -> List[str]:

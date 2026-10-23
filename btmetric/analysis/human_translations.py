@@ -65,10 +65,17 @@ class HumanTranslationTest:
         candidates = {("mt", system): hyps for system, hyps in self._outputs.hypotheses.items()}
         candidates.update({("human", name): verses for name, verses in self._alternatives.items()})
         LOGGER.info(f"Scoring {len(candidates)} candidates on {len(self._verse_indices)} verses")
+        scored_vrefs = frozenset(evaluation_set.segment_ids[i] for i in self._verse_indices)
         rows = []
         for feature_name in feature_names:
             feature = registry.get(feature_name)
             try:
+                # Experiment configs may list several source or target extracts; the first stands for the pair.
+                feature.prepare(
+                    evaluation_set.source_language.split("+")[0],
+                    evaluation_set.target_language.split("+")[0],
+                    scored_vrefs,
+                )
                 for (kind, name), hypotheses in candidates.items():
                     selected = [hypotheses[i] for i in self._verse_indices]
                     score = feature.system_score(sources, selected, references)

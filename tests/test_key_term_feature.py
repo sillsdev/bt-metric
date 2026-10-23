@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from btmetric.features.alignment import BibleResources
+from btmetric.features.corpora import BibleCorpus
 from btmetric.features.key_terms import EnglishBible, KeyTermAccuracy, RenderingMatcher
 
 
@@ -25,7 +25,7 @@ def write_toy_bibles(tmp_path: Path) -> KeyTermAccuracy:
     (tmp_path / "Major-metadata.txt").write_text("Ἰησοῦς\tPN\tperson\nΜωϋσῆς\tPN\tperson\n", encoding="utf-8")
     (tmp_path / "Major-vrefs.txt").write_text(f"{jesus}\n{moses}\n", encoding="utf-8")
     (tmp_path / "en-Major-glosses.txt").write_text("Jesus\nMoses\n", encoding="utf-8")
-    resources = BibleResources(
+    resources = BibleCorpus(
         scripture_dirs=(tmp_path,), corpora_table=tmp_path / "none.tsv", vref_path=tmp_path / "vref.txt"
     )
     return KeyTermAccuracy(resources=resources, english=EnglishBible("en-BSB", tmp_path))

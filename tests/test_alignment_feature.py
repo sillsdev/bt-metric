@@ -2,20 +2,19 @@ from pathlib import Path
 
 import numpy as np
 
-from btmetric.features.alignment import AlignmentCoverage, BibleResources, Tokenizer
+from btmetric.features.alignment import AlignmentCoverage, Tokenizer
+from btmetric.features.corpora import BibleCorpus
 
 ENGLISH = ["jesus spoke to them", "then jesus left the house", "moses spoke to the people", "moses left the city"]
 TARGET = ["yesu aliongea nao", "kisha yesu akaondoka nyumbani", "musa aliongea na watu", "musa akaondoka mjini"]
 
 
-def write_bibles(tmp_path: Path) -> BibleResources:
+def write_bibles(tmp_path: Path) -> BibleCorpus:
     vrefs = [f"GEN 1:{i + 1}" for i in range(2000)]
     (tmp_path / "vref.txt").write_text("\n".join(vrefs) + "\n", encoding="utf-8")
     (tmp_path / "en-TEST.txt").write_text("\n".join(ENGLISH * 500) + "\n", encoding="utf-8")
     (tmp_path / "sw-TEST.txt").write_text("\n".join(TARGET * 500) + "\n", encoding="utf-8")
-    return BibleResources(
-        scripture_dirs=(tmp_path,), corpora_table=tmp_path / "none.tsv", vref_path=tmp_path / "vref.txt"
-    )
+    return BibleCorpus(scripture_dirs=(tmp_path,), corpora_table=tmp_path / "none.tsv", vref_path=tmp_path / "vref.txt")
 
 
 def test_tokenizer_uses_characters_for_scripts_without_spaces():
@@ -62,3 +61,31 @@ def test_extracts_are_found_without_a_config_suffix_or_with_a_date(tmp_path: Pat
     (tmp_path / "qab-XYZ_2023_08_22.txt").write_text("x\n", encoding="utf-8")
     assert resources.extract_path("qac-ABCD-QAC") == tmp_path / "qac-ABCD.txt"
     assert resources.extract_path("qab-XYZ") == tmp_path / "qab-XYZ_2023_08_22.txt"
+
+
+def test_reference_anchored_coverage_asks_only_for_what_the_reference_expresses(tmp_path: Path):
+    from btmetric.features.alignment import ReferenceAnchoredCoverage
+
+    feature = ReferenceAnchoredCoverage(write_bibles(tmp_path))
+    feature.prepare("en-TEST", "sw-TEST")
+    sources = ["jesus spoke to them"] * 3
+    # The reference leaves out "nao" (them); a hypothesis that also leaves it out loses nothing.
+    references = ["yesu aliongea"] * 3
+    scores = feature.segment_scores(sources, ["yesu aliongea", "yesu aliongea nao", "yesu"], references)
+    assert scores[0] == 1.0 and scores[1] == 1.0 and scores[2] < 1.0
+
+
+def test_coverage_detectors_ignore_small_shortfalls_and_penalize_large_ones(tmp_path: Path):
+    from btmetric.features.alignment import ReferenceAnchoredCoverage, deficit_penalty
+
+    assert deficit_penalty(np.array([1.2, 1.0, 0.8, 0.5]), 0.3).tolist() == [0.0, 0.0, 0.0, -0.2]
+    resources = write_bibles(tmp_path)
+    target = AlignmentCoverage("target", resources, detector_tolerance=0.3)
+    target.prepare("en-TEST", "sw-TEST")
+    assert target.name == "coverage-target-detector"
+    sources, references = ["jesus spoke to them"], ["yesu aliongea nao"]
+    assert target.segment_scores(sources, references, references)[0] == 0.0
+    assert target.segment_scores(sources, ["yesu aliongea nao xyzzy plugh qwerty frob"], references)[0] < 0.0
+    omissions = ReferenceAnchoredCoverage(resources, detector_tolerance=0.3)
+    omissions.prepare("en-TEST", "sw-TEST")
+    assert omissions.segment_scores(sources, ["yesu"], references)[0] < 0.0

@@ -54,6 +54,10 @@ class SegmentJudgments:
     def items(self) -> np.ndarray:
         return self._table["item"].to_numpy()
 
+    def systems(self) -> np.ndarray:
+        """Which system produced each hypothesis, where known (WMT DA and AfriMTE don't say)."""
+        return self._table["system"].to_numpy() if "system" in self._table else np.full(len(self._table), "")
+
     def sample_items(self, max_items: int, seed: int = 0) -> "SegmentJudgments":
         """A random subset of whole items, keeping every hypothesis of each chosen item."""
         items = self._table["item"].unique()
@@ -108,12 +112,13 @@ class JudgedOutputs:
                 "hypothesis": hypothesis,
                 "reference": self.evaluation_set.references[i],
                 "human": self.human_scores[system][i],
+                "system": system,
             }
             for system in self.systems()
             if system in self.human_scores
             for i, hypothesis in enumerate(self.hypotheses[system])
         ]
-        table = pd.DataFrame(rows, columns=["item", "source", "hypothesis", "reference", "human"])
+        table = pd.DataFrame(rows, columns=["item", "source", "hypothesis", "reference", "human", "system"])
         return SegmentJudgments(
             self.evaluation_set.name,
             table.dropna(subset=["human"]),

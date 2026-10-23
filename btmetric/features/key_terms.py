@@ -13,8 +13,9 @@ import numpy as np
 
 from ..terms.inference import AlignedVerses, InferredRendering, RenderingInferrer, specific_renderings
 from ..terms.major_terms import MajorTermList
-from .alignment import BibleResources, Tokenizer
+from .alignment import Tokenizer
 from .base import Feature
+from .corpora import BibleCorpus
 
 LOGGER = logging.getLogger(__name__)
 
@@ -62,8 +63,8 @@ class InferredRenderings:
     """Inferred, specificity-filtered renderings by target language and excluded verses, shared by the key term
     features so each language is aligned once whatever categories a feature keeps."""
 
-    def __init__(self, resources: Optional[BibleResources] = None, english: EnglishBible = EnglishBible()) -> None:
-        self._resources = resources or BibleResources()
+    def __init__(self, resources: Optional[BibleCorpus] = None, english: EnglishBible = EnglishBible()) -> None:
+        self._resources = resources or BibleCorpus()
         self._english = english
         self._terms: Optional[MajorTermList] = None
         self._inferred: Dict[Tuple[str, FrozenSet[str]], Optional[List[InferredRendering]]] = {}
@@ -99,7 +100,7 @@ class KeyTermAccuracy(Feature):
         self,
         categories: Optional[FrozenSet[str]] = None,
         min_confidence: float = 0.6,
-        resources: Optional[BibleResources] = None,
+        resources: Optional[BibleCorpus] = None,
         english: EnglishBible = EnglishBible(),
         renderings: Optional[InferredRenderings] = None,
     ) -> None:

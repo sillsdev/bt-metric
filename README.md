@@ -133,14 +133,30 @@ uv run btmetric-validate-rendering-inference --projects 30
 
 ## Metric features
 
-Beyond the baselines, these features are opt-in because each trains a model per language pair on Bible text from the bucket (and leaves the verses being scored out of it):
+Beyond the baselines, these features are opt-in because each trains a model per language pair. Models train on a Bible-sized amount of text **in the domain being scored** (`btmetric/features/corpora.py`): Bible text for Scripture, and news for WMT, from OPUS News Commentary or, failing that, the judged sets' own source-reference pairs scored in folds. The segments being scored are always left out.
 
 | Feature | Measures |
 |---|---|
-| `coverage-source` | Share of source words aligned into the hypothesis, relative to the reference (omissions) |
-| `coverage-target` | Share of hypothesis words aligned to the source, relative to the reference (additions, loops, untranslated text) |
+| `coverage-source`, `coverage-target` | Share of source (target) words aligned to the other side, weighted by translation probability, relative to the reference: omissions (additions, loops, untranslated text) |
+| `coverage-reference` | Omissions measured only against the source content the reference expresses, so a hypothesis is never asked to be more literal than the reference |
+| `coverage-*-detector` | The same as error detectors: 0 while the hypothesis keeps 70% of the reference's coverage, penalized below that |
 | `key-terms`, `key-terms-names` | Share of the reference's key term renderings the hypothesis also uses (all terms, or proper names only) |
-| `perplexity` | Distance between the hypothesis's and the reference's character perplexity under a Bible-only 5-gram model |
+| `perplexity`, `perplexity-one-sided` | Distance between the hypothesis's and the reference's character perplexity under a 5-gram model of the target language (one-sided: only being less predictable counts) |
+
+PLAN.md §2.2.2 records how each fares. On human judgments of news, none adds to chrF3, and coverage is kept only as an optional guard against loops and runaway output.
+
+Fit the combined metric on human judgments (WMT MQM and DA), with in-domain training, and compare it with each feature alone at segment and system level. `--add` adds features to an existing score table:
+
+```
+uv run btmetric-fit-combination-human --build chrf3 bleu perplexity coverage-reference --training-domain news
+uv run btmetric-fit-combination-human --add coverage-target-detector --training-domain news
+```
+
+Check which features catch the omissions and additions that WMT MQM annotators marked (`--major-only` for Major errors):
+
+```
+uv run btmetric-check-mqm-error-categories --major-only
+```
 
 Generated and downloaded files go in `data/`, which is not committed.
 

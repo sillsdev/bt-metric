@@ -115,6 +115,129 @@ At the features' confidence threshold of 0.6, it raises precision from 0.766 to 
 - *Extract names.* Experiment configs don't always name an extract as it is stored: some add a suffix (`qac-ABCD-QAC` is `qac-ABCD.txt`), and many extracts are dated. The lookup now tries the exact name, its dated versions, and the name with trailing segments removed, before falling back to the language's selected corpus.
 - *Missing scores.* The challenge-set evaluation counted a row with no feature score as a failure. Such rows are now left out, and the number of scored rows is reported. Feature results computed before this fix are superseded.
 
+**Results on the synthetic challenge set** (71,737 rows, 58 test sets; share of rows where the feature strictly prefers the unperturbed output):
+
+| Perturbation | chrF3 | BLEU | coverage-source | coverage-target | perplexity | key-terms | **combined** |
+|---|---|---|---|---|---|---|---|
+| addition | 0.49 | 0.89 | 0.35 | **0.98** | 0.68 | 0.00 | **0.95** |
+| repetition | 0.62 | 0.86 | 0.27 | **0.98** | 0.56 | 0.00 | **0.96** |
+| omission | 0.98 | 0.84 | **0.96** | 0.47 | 0.62 | 0.42 | 0.94 |
+| truncation | 1.00 | 0.86 | **0.98** | 0.48 | 0.67 | 0.40 | 0.97 |
+| key term | 0.96 | 0.83 | 0.91 | 0.93 | 0.59 | **0.70** | **0.98** |
+| negation | 0.89 | 0.67 | 0.84 | 0.65 | 0.50 | 0.03 | 0.81 |
+| source copy | 0.98 | 0.95 | 0.89 | 0.89 | **0.99** | 0.70 | 0.97 |
+| word order | 0.93 | 0.80 | 0.70 | 0.71 | 0.72 | 0.06 | 0.93 |
+| wrong verse | 0.98 | 0.95 | 0.97 | 0.97 | 0.69 | 0.73 | **0.99** |
+| **mean** | 0.87 | 0.85 | 0.76 | 0.79 | 0.67 | 0.34 | **0.945** |
+
+- **Each sub-score responds to its own error types.** coverage-target to additions and loops, coverage-source to omissions and truncation, perplexity to untranslated text, key terms to key-term errors (more strongly when severe: 0.66 → 0.81). Each is near zero on, or even moves the wrong way on, the other errors. Key terms tie on errors that don't touch terms, which counts as a miss here.
+- **Combined.** The pairwise log-linear model (§4.1) is validated by leaving one test set out, so each language is scored by weights fit on other languages. It reaches 0.945 against chrF3's 0.868, the gains coming where chrF3 is blind (additions 0.49 → 0.95, repetition 0.62 → 0.96). It gives up some negation sensitivity (0.89 → 0.81), because BLEU's weight pulls toward its weakness there.
+- **Weights** fit on all test sets: chrF3 0.23, BLEU 0.24, coverage-target 0.22, coverage-source 0.16, perplexity 0.09, key terms 0.06. They come from synthetic errors in equal proportions, so they show that the features combine; the final weights must come from human judgments (Phase 7).
+- **Key terms' value is not measured yet.** Their likely contribution is severity: a wrong divine name matters more than a wrong common word. The challenge set only asks which side is better, and WMT text has few key terms.
+
+**Results on real errors** (2,793 pairs of real MT outputs):
+
+| Real error | chrF3 | BLEU | coverage-source | coverage-target | perplexity |
+|---|---|---|---|---|---|
+| over-long output | 0.50 | 0.82 | 0.35 | **0.79** | 0.61 |
+| over-short output | **0.95** | 0.84 | 0.77 | 0.25 | 0.58 |
+| decoder loop | 0.60 | 0.62 | 0.52 | **0.64** | 0.55 |
+| source copy | **0.72** | 0.59 | 0.27 | 0.24 | 0.63 |
+
+Real loops are hard for every metric, because a real loop comes with other errors and the "clean" alternative isn't always clearly better. The real source-copy cases come almost entirely from **closely related language pairs**: Cebuano → Bantayanon, Standard Arabic → Hijazi Arabic, two Quechua varieties, Tibetan under two codes. There an output close to the source can be largely valid, so these labels are unreliable, and coverage's high scores are arguably right. Many projects translate from a related major language, so the metric must stay valid when much of the right answer looks like the source.
+
+**Results against human judgments, perplexity alone** (superseded, see §3.2: the character model was trained on Bible text but scored news):
+
+- System-level pairwise accuracy on WMT MQM: **0.66** (0.63–0.69), against chrF3 0.72 and COMET-22 0.78.
+- Segment-level acc_eq on WMT 2021–22 MQM: **0.46**, slightly above chrF3 (0.42–0.44) and BLEU, near COMET-22.
+- AfriMTE, Kendall's tau: 0.05. With one system per language pair, there is little variation in fluency for perplexity to pick up.
+
+A naturalness signal trained only on Scripture tracks human judgments of news translation about as well as reference overlap does at segment level, independently of it.
+
+**Results against human judgments, coverage alone** (superseded, see §3.2: the aligners were trained on Bible text but scored news; the in-domain rerun below shows the system-level result is not mainly a domain effect):
+
+| | coverage-source | coverage-target |
+|---|---|---|
+| System-level pairwise accuracy, WMT MQM | **0.39** (0.36–0.43) | **0.37** (0.34–0.40) |
+| Segment-level acc_eq, WMT 2021–22 MQM | 0.45–0.46 | 0.45–0.46 |
+| Segment-level acc_eq, WMT DA | 0.38–0.46 | 0.39–0.48 |
+
+At system level both are *below chance*: they tend to rank the human-preferred news system lower. At segment level they slightly beat chrF3 (0.42–0.44) on the expert-annotated MQM sets and trail it on DA.
+
+**Results against human judgments, in-domain training** (`btmetric-fit-combination-human --training-domain news`, October 2026).
+- *Setup:* aligners and language models are trained on Bible-sized in-domain news text (§3.2). Every WMT MQM segment of every system is scored, plus sampled DA sets.
+- *Combination:* the pairwise log-linear model is fit on within-item hypothesis pairs labelled by human preference. Each collection is scored with weights fit on the others.
+- *Segment-level statistic:* the share of within-item pairs ordered as the humans ordered them. Ties count as misses, which understates features that often tie (such as the one-sided perplexity).
+
+| Collection | **combined** | chrF3 | BLEU | perplexity | coverage-target | coverage-reference | coverage-source |
+|---|---|---|---|---|---|---|---|
+| WMT 2022 MQM | **0.601** | 0.598 | 0.563 | 0.531 | 0.421 | 0.361 | 0.380 |
+| WMT 2021 MQM | **0.541** | 0.537 | 0.509 | 0.503 | 0.425 | 0.380 | 0.404 |
+| WMT 2020 MQM | 0.579 | 0.579 | 0.553 | 0.550 | 0.422 | 0.419 | 0.401 |
+| WMT DA 2017–22 | chrF3 + 0.000–0.005 | 0.47–0.63 | 0.35–0.56 | 0.47–0.54 | 0.39–0.49 | 0.29–0.46 | 0.34–0.46 |
+
+- **System level, WMT MQM:** combined **0.752** (0.72–0.78) vs chrF3 0.747 (0.72–0.78), BLEU 0.740, perplexity 0.661, coverage-reference 0.530, coverage-source 0.406, coverage-target 0.370.
+- **Weights fit on all collections:** chrF3 0.74, perplexity-one-sided 0.10, BLEU 0.09, perplexity 0.05, coverage-reference 0.01, coverage-source and coverage-target **0**.
+- **Low-resource DA pairs** (gu, ta, kk, is, km, ha, ps): chrF3 is again the strongest single signal (0.50–0.70), and coverage stays near 0.5. These pairs had no News Commentary, so their aligners trained on only ~1,500–2,000 in-domain pairs from the folds. xh–zu and bn–hi had too little in-domain text to train anything.
+
+What this shows:
+
+- **On news, the new features add nothing over chrF3, even trained in-domain.** The combination matches chrF3 within its confidence interval.
+- **Coverage's poor system-level showing is not mainly a domain effect.** In-domain training barely changed it (0.39 → 0.41, 0.37 → 0.37). In its normal range, coverage rewards following the source's structure, and stronger news systems (and human references) follow it less closely.
+- **WMT can't test what coverage is for.** Strong news systems rarely make the gross errors (dropped clauses, inserted passages, loops) that coverage detects and chrF3 misses, though real minority-language MT output does (§3.3, Phase 3: 3.4% of verses over-long, loops in 1.4%), and that is where coverage wins on the challenge sets.
+- **Next:** coverage becomes an *error detector* (`*-detector`). It scores 0 while the hypothesis keeps at least 70% of the reference's coverage and is penalized only below that, so normal paraphrase can't count against a hypothesis. Whether detecting gross errors improves agreement with human judgments of **Bible** MT cannot be settled on news data. That makes Bible-domain human judgments (Phase 10), or judged low-resource MT with gross errors, the deciding evidence.
+
+**Human-annotated omissions and additions** (`btmetric/analysis/mqm_error_categories.py`).
+- *Data:* Google's raw WMT MQM release keeps each annotation's category and severity (en-de and zh-en 2020–22; en-ru 2022). The categories are case-normalized, since capitalization differs by year.
+- *Pairs:* an output marked with Accuracy/Omission (or Addition) is paired with another system's output for the same source that every annotator marked No-error.
+- *Training:* aligners use in-domain News Commentary samples.
+
+| Feature | All omissions (4,823) | Major omissions (3,247) | All additions (1,396) | Major additions (718) |
+|---|---|---|---|---|
+| **chrF3** | **0.69** | **0.74** | 0.60 | 0.58 |
+| BLEU | 0.61 | 0.63 | **0.62** | **0.63** |
+| coverage-target | 0.39 | 0.38 | 0.58 | 0.58 |
+| coverage-source | 0.45 | 0.45 | 0.32 | 0.35 |
+| coverage-reference | 0.43 | 0.43 | 0.31 | 0.32 |
+| coverage-reference-detector | 0.23 (65% ties) | 0.24 (63% ties) | 0.12 (76% ties) | 0.08 (83% ties) |
+| coverage-target-detector | 0.13 (76% ties) | 0.12 (76% ties) | 0.12 (78% ties) | 0.14 (76% ties) |
+
+Values are the share of pairs where the feature prefers the clean output. The rest split between ties and preferring the faulty one. Restricting to Major errors makes chrF3 *better* (0.69 → 0.74 on omissions) and leaves coverage unchanged. Even major human-marked omissions in fluent MT are usually a phrase within a long sentence, which reference overlap captures better than word alignment trained on 30,000 sentence pairs.
+
+**Decision on coverage.** Across all the evidence:
+
+| Evidence | Coverage beats chrF3? |
+|---|---|
+| Synthetic perturbations (additions, loops, omissions) | yes, by a wide margin |
+| Real minority-language outputs flagged by length (over-long) | yes |
+| Human judgments of WMT news (in-domain training) | no; the combination gives it ~0 weight |
+| Human-annotated omissions and additions in WMT news | no; chrF3 is clearly better |
+
+Coverage's advantage appears only on errors that are defined by length or by construction: whole clauses dropped, passages inserted, loops. On the errors humans mark in fluent MT, it adds nothing. So:
+
+- Coverage stays **out of the metric's core**.
+- `coverage-target-detector` is kept as an **optional guard** against loops and runaway output, which are frequent in low-resource MT and invisible to chrF3. It is excluded from the weighting until Bible-domain human judgments support it.
+- The remaining effort goes to the components with clearer prospects:
+  - back-translation scoring (§2.3, Phase 5), the only accuracy signal that doesn't rest on surface overlap
+  - the Bible-domain human check (Phase 10), which is now the main way to settle what helps on Scripture
+
+**Other human translations, Bible text** (§3.3b, Hebrew → English NASB). Share of the 22 MT systems each published translation outscores; a fair metric puts every one near 1.00:
+
+| Translation (style) | chrF3 | COMET-22 | coverage-source | coverage-target | perplexity |
+|---|---|---|---|---|---|
+| ESV, RSV, NRSV, NKJV (literal) | 1.00 | 1.00 | 1.00 | 1.00 | 0.64–0.68 |
+| BSB, CSB, NIV (mediating) | 1.00 | 1.00 | 0.64–0.73 | 1.00 | 0.64 |
+| NET | 0.77 | 1.00 | 0.64 | 0.68 | 0.09 |
+| NLT (dynamic) | 0.64 | 1.00 | 0.59 | 0.64 | 0.05 |
+| GNT (dynamic) | 0.64 | 0.82 | 0.18 | 0.59 | 0.55 |
+| CEV (dynamic) | 0.00 | 0.64 | 0.00 | 0.23 | 0.00 |
+| KJV, WEB, LSV, YLT (archaic or very literal) | 0.64–1.00 | 0.64–1.00 | 0.64–1.00 | 0.64–1.00 | 0.00 |
+
+- **coverage-source rewards literal translation, even in-domain.** Dynamic translations restructure the source, so fewer source words align, and CEV scores below every MT system. The WMT result is therefore not only a domain mismatch. Rewarding source coverage penalizes meaning-based translation, which many projects aim for. It should not enter the metric as it stands. An omission signal that doesn't reward literalness, such as unaligned content of the *reference*, is worth trying.
+- **coverage-target is much fairer.** Only the most dynamic translations drop (NLT 0.64, GNT 0.59, CEV 0.23), and it is the feature that catches additions and loops. Keep it, with this caveat.
+- **perplexity measures naturalness within the project's style.** The language model is trained on the target-language Bible, here NASB, the reference itself, so other registers score as unnatural (KJV, WEB, YLT, CEV all 0.00). Style and naturalness are closely tied, and when MT systems are compared for one project, matching the project's register is part of what makes a draft natural *for that project*. In a minority language the only Bible is usually the project's own, so this is how the feature will behave there, and it is largely the right behaviour. The alternative-translation test is a stress test that the real use case rarely meets: another register in the same language. A one-sided variant (`perplexity-one-sided`) penalizes only being *less* predictable than the reference, leaving over-predictable output (loops) to coverage-target. The human-judgment fit decides between the two.
+- **This raises the value of Bible-domain human judgments (Phase 10).** WMT news can't show whether a feature that fails there would help on Scripture, and the alternative-translation test only shows bias, not usefulness.
+
 ### 2.3 Back-translation: options, cost and memorization
 
 Many projects have no human back-translation, so any back-translation feature has to **generate or score with a model**. No existing back-translation is required.
@@ -205,14 +328,15 @@ Use sets that have references, multiple systems and human judgments:
 
 ### 3.2 Simulating low-resource conditions on these test sets
 
-The human-judged sets cover languages with plenty of resources. In real use, every auxiliary model is trained only on a Bible corpus. Rebuild the features under that constraint:
+The human-judged sets cover languages with plenty of resources. In real use, every auxiliary model is trained on a small amount of text **in the domain it scores**: a Bible-sized corpus, and Bible text when scoring Bible translations. The simulation keeps both properties. Training data is limited to about a Bible's worth (~30k segments), and it comes from the **test set's domain**, which is news for WMT.
 
-- **Naturalness LM:** train on that language's Bible only, or a subset of about 8k–30k verses to match a typical minority-language NT.
-- **Back-translation model:** train target→English on the **Bible for that language pair only**. Most of the test-set languages have a Bible on eBible.
-- **Aligner:** train on the same Bible-only data.
+- **Aligner and naturalness LM** (`NewsCorpus`, `btmetric-fit-combination-human --training-domain news`):
+  - Where OPUS has News Commentary for the pair, a fixed 30k-pair sample, with any sentence that appears in a test set removed: en–de, cs, ru, zh, ja, kk, ar, fr, es. That covers every WMT MQM pair.
+  - Otherwise, the pair's own judged source–reference pairs, pooled across years. Each set is scored in 5 folds, so no segment's models are trained on its own source or reference.
+- **Back-translation model:** the same principle applies; train it on in-domain, Bible-sized data.
 - **Comparison condition:** compute the same features with full-resource models (e.g. NLLB) to measure how much each feature degrades under realistic constraints.
 
-The auxiliary models are trained on the Bible but tested on news. That makes these results conservative, since real use is Bible on Bible.
+*Correction (October 2026).* Aligners and language models were first trained on Bible text and tested on WMT news. That is out of domain: a word aligner or language model must be trained in the domain it scores. The WMT results for coverage and perplexity from that setup (§2.2.2) are confounded and superseded by the in-domain rebuild. Bible-domain results (challenge sets, alternative human translations) are unaffected.
 
 **Bible coverage** (`btmetric-find-bible-corpora` over `MT/scripture` and `eBible/MT/scripture`, October 2026):
 

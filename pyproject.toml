@@ -30,6 +30,8 @@ btmetric-validate-rendering-inference = "btmetric.terms.validate:main"
 btmetric-measure-error-rates = "btmetric.perturbations.calibration:main"
 btmetric-build-natural-errors = "btmetric.perturbations.natural_errors:main"
 btmetric-fit-combination = "btmetric.combination.challenge:main"
+btmetric-fit-combination-human = "btmetric.combination.human:main"
+btmetric-check-mqm-error-categories = "btmetric.analysis.mqm_error_categories:main"
 
 [dependency-groups]
 dev = [
