@@ -73,3 +73,24 @@ def test_score_adds_feature_columns_per_test_set(tmp_path: Path):
     scored = SilverTable(path).score(["chrf3"], FeatureRegistry())
     assert scored["chrF3"].tolist()[0] == 100.0 and scored["chrF3"].tolist()[1] < 100.0
     assert "chrF3" in SilverTable(path).load().columns
+
+
+def test_empty_outputs_load_as_empty_strings_not_missing_values(tmp_path: Path):
+    path = tmp_path / "rows.tsv"
+    rows = pd.DataFrame(
+        {
+            "test_hash": "t",
+            "source_extract": "en-X",
+            "target_extract": "es-Y",
+            "language_pair": "en-es",
+            "vref": ["v1", "v2"],
+            "system": "a",
+            "source": "s",
+            "hypothesis": ["la casa", ""],
+            "reference": "r",
+            "score": [1.0, np.nan],
+        }
+    )
+    rows.to_csv(path, sep="\t", index=False)
+    loaded = SilverTable(path).load()
+    assert loaded["hypothesis"].tolist() == ["la casa", ""] and np.isnan(loaded["score"].iloc[1])

@@ -338,7 +338,12 @@ It catches the errors chrF3 misses: additions and repetition. It is near perfect
 | combined (leave one collection out) | equal to chrF3 within 0.01 | 0.719 (0.688–0.749) |
 
 - On news, back-translation adds nothing. Fitted on all collections, it gets 12% of the weight (chrF3 64%, one-sided perplexity 12%, BLEU 10%, coverage 0), yet the combined metric is no better than chrF3 at segment level and slightly worse at system level.
-- At system level `bt-nllb` is **below chance**: on news it tends to prefer the systems humans rated worse. The cause isn't known. One hypothesis is that some WMT systems produce text close to NLLB's own training data, which the reverse model then finds especially informative.
+- At system level `bt-nllb` is **below chance**: on news it tends to prefer the systems humans rated worse.
+- **Why: it rewards literalness.** By MQM set, it works on WMT 2020 (en–de 0.81, where systems differ widely in quality) but is below chance from 2021 on (0.26–0.42 for en→de and en→ru), where many strong systems differ mainly in fluency and style.
+  - On those sets its system ranking tracks alignment coverage closely: Spearman 0.81–0.90 with coverage-source and 0.62–0.78 with coverage-target, against 0.29 with output length and −0.14 on average with human MQM.
+  - So it measures how predictably the source can be read back from the output, and among strong systems humans prefer the less literal ones. That is also why the coverage features fail on news.
+  - For zh→en it follows chrF3 and perplexity instead, likely because word alignment with Chinese is weaker.
+- **Risk for Bible translation:** a literalness signal may penalize valid dynamic translations, the failure the metric is meant to fix. The decisive check is `bt-nllb` on the Hebrew → English NASB human-translation test (§3.3b). Until it passes, `bt-nllb` gets no weight in the combined metric beyond guarding against gross errors.
 
 So back-translation is useful as a guard against the Bible-specific failures chrF3 misses (additions, repetition, copies, wrong verses), not as a general quality signal. **Next:** minority languages NLLB doesn't cover, with the fine-tuned and scratch reverse models; check the system-level result on news before giving `bt-nllb` weight in the combined metric; and the generation-based options.
 
@@ -646,6 +651,22 @@ For system comparison, knowing **when a difference is meaningful** is as importa
 - Following Kocmi et al. (2024), *Navigating the Metrics Maze*, map each metric difference to the probability that humans agree with the direction. Use system pairs from WMT, AfriMTE and IndicMT. Example: "a gain of X points predicts human preference Y% of the time."
 - Combine this with **paired bootstrap resampling** over verses for statistical significance on a given book.
 - Report results in this form: *"System B beats A by X (95% CI [a, b]); historically, differences this size match human preference Y% of the time."*
+
+**First results** (`btmetric-significance-thresholds`, October 2026). 830 WMT MQM system pairs that human raters distinguished; share of pairs where humans agree with the metric's direction, by the size of the system-level difference:
+
+| Difference | chrF3 | m-chrF3 | BLEU | spBLEU |
+|---|---|---|---|---|
+| ≤ 0.5 | **0.49** | 0.54 | 0.54 | 0.47 |
+| 0.5–1 | 0.63 | 0.69 | 0.60 | 0.61 |
+| 1–2 | **0.80** | 0.78 | 0.67 | 0.71 |
+| 2–4 | 0.82 | 0.85 | 0.80 | 0.80 |
+| > 4 | 0.83 | 0.86 | 0.81 | 0.84 |
+
+- **Under half a chrF3 point is a coin flip**; from about 1 point, humans agree about 80% of the time.
+- **Agreement plateaus around 83–86%.** A metric is wrong about some systems however large the gap, so a fitted logistic curve's "90% at 6 chrF3 points" is an extrapolation. In practice the lexical metrics alone never reach 90%.
+- BLEU and spBLEU need differences about twice as large as chrF3 for the same agreement.
+- **Caveat:** these are high-resource news systems. chrF3's scale and spread differ on minority-language Bibles, so the exact thresholds won't transfer; the coin-flip zone and the plateau will. Thresholds for the Bible domain need Bible system pairs with human or silver labels (§3.3c).
+- Together with the system-pair analysis (§3.4: about 40% of 250-verse comparisons are not significant), this gives a practical rule: report the paired-bootstrap interval, and treat chrF3 differences under about 1 point as no evidence.
 
 ---
 

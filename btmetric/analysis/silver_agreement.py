@@ -123,7 +123,11 @@ class SilverTable:
         return table
 
     def load(self) -> pd.DataFrame:
-        return pd.read_csv(self._path, sep="\t", keep_default_na=False, na_values=[""], low_memory=False)
+        table = pd.read_csv(self._path, sep="\t", keep_default_na=False, na_values=[""], low_memory=False)
+        # Empty cells are missing scores, but in the text columns they are empty outputs, which must stay strings.
+        text_columns = ["source", "hypothesis", "reference"]
+        table[text_columns] = table[text_columns].fillna("").astype(str)
+        return table
 
     def _save(self, table: pd.DataFrame) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
