@@ -76,7 +76,8 @@ class HumanTranslationTest:
                     evaluation_set.target_language.split("+")[0],
                     scored_vrefs,
                 )
-                for (kind, name), hypotheses in candidates.items():
+                for k, ((kind, name), hypotheses) in enumerate(candidates.items(), start=1):
+                    LOGGER.info(f"{feature.name}: candidate {k}/{len(candidates)} ({name})")
                     selected = [hypotheses[i] for i in self._verse_indices]
                     score = feature.system_score(sources, selected, references)
                     rows.append({"feature": feature.name, "kind": kind, "candidate": name, "score": score})

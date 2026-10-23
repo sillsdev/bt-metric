@@ -51,9 +51,10 @@ class SystemLevelEvaluator:
         gold_deltas: List[np.ndarray] = []
         metric_deltas: List[np.ndarray] = []
         results = []
-        for outputs in outputs_list:
+        for k, outputs in enumerate(outputs_list, start=1):
             outputs = outputs.without_systems([s for s in outputs.systems() if self._is_excluded(s)])
             evaluation_set = outputs.evaluation_set
+            LOGGER.info(f"{feature.name}: system level, set {k}/{len(outputs_list)} ({evaluation_set.name})")
             feature.prepare(evaluation_set.source_language, evaluation_set.target_language)
             systems = [system for system in outputs.systems() if system in outputs.human_scores]
             gold = [outputs.human_system_score(system) for system in systems]
@@ -259,7 +260,9 @@ def main() -> None:
         try:
             LOGGER.info(f"Meta-evaluating {feature.name}")
             results.extend(system_level.evaluate(mqm, feature, "wmt-mqm"))
-            for judgments in [outputs.segment_judgments() for outputs in mqm] + da + afrimte:
+            segment_sets = [outputs.segment_judgments() for outputs in mqm] + da + afrimte
+            for k, judgments in enumerate(segment_sets, start=1):
+                LOGGER.info(f"{feature.name}: segment level, set {k}/{len(segment_sets)} ({judgments.name})")
                 results.append(segment_level.evaluate(judgments, feature))
         finally:
             feature.close()
