@@ -502,7 +502,19 @@ Then test whether the metric, computed under low-resource constraints, reproduce
 | BLEU | 0.570 | 0.734 |
 | perplexity-one-sided | 0.408 | 0.560 |
 
-Against the reference-free xCOMET-XL-QE every metric drops by about 0.07, in the same order. One-sided perplexity's score is mostly ties, which count as wrong. The trained features are still to be scored here.
+Against the reference-free xCOMET-XL-QE every metric drops by about 0.07, in the same order. One-sided perplexity's score is mostly ties, which count as wrong. The trained features, trained on each test set's Bible text with the scored verses left out:
+
+| Feature | Two systems, same verse | System level (95% CI) |
+|---|---|---|
+| coverage-reference | 0.529 | 0.711 (0.69–0.74) |
+| coverage-target | 0.576 | 0.669 (0.64–0.70) |
+| coverage-source | 0.547 | 0.651 |
+| perplexity | 0.573 | 0.645 |
+| coverage-reference-detector | 0.223 | 0.627 |
+| coverage-target-detector | 0.123 | 0.578 |
+| coverage-source-detector | 0.119 | 0.538 |
+
+None beats chrF3 alone; the detectors mostly tie. They matter only in combination (§4.1).
 
 **d. Quality ladders.** Train systems on 1k, 2k, 4k, … verses, or take checkpoints, and check that the metric recovers the expected order. Past experiments (§6.2) already provide many of these in real minority languages: series that vary the amount of training data, the sources or the model, plus two saved checkpoints for most experiments. It's a weak test, meaningful only where the quality steps are large. It must not depend on chrF-based checkpoint selection, which would be circular.
 
@@ -552,7 +564,27 @@ The teams themselves agree on only **63%** of verse preferences (130 verse pairs
 - **Usability and "would it help" are weaker signals.** chrF3 is best on usability at 0.60; no feature beats chance on human vs. AI (about 100 verses).
 - **The samples are small:** ±0.09 on 128 pairs, and only 5 model comparisons with independent references.
 
-Still to do: use the corrections as references for their verses, parse the Team 24 and Team 25 workbooks (a different format), and fit the combination with these judgments held out by team.
+Team 25 adds 54 usability ratings (chrF3 still leads on usability, at 0.57). Team 24 adds nothing usable: every verse was marked "correct".
+
+**Verse analyses.** The compiled feedback workbooks also hold each team's analysis of about 22–45 verses (624 in all, 23 teams): same basic meaning, clear, sounds right, hard to read aloud, confusing, a checklist of error types, a score out of 100, and the edit proportion of the team's later correction of the same verse. Drafts come from the teams' verse selection sheets. Within each team, how often a feature ranks two analysed verses as the team rated them (all project references; few are independent):
+
+| Team's judgment (decided pairs) | chrF3 | spBLEU | perplexity | coverage-source | coverage-target | coverage-reference |
+|---|---|---|---|---|---|---|
+| Score out of 100 (1,257) | 0.60 | **0.61** | 0.54 | 0.46 | 0.54 | 0.51 |
+| Same basic meaning (254) | **0.70** | 0.69 | 0.61 | 0.28 | 0.29 | 0.38 |
+| Clear (422) | 0.70 | **0.71** | 0.66 | 0.41 | 0.42 | 0.52 |
+| Sounds right (301) | 0.65 | **0.69** | 0.66 | 0.48 | 0.60 | 0.60 |
+| Edit proportion of the correction (1,225) | **0.65** | 0.65 | 0.51 | 0.51 | 0.47 | 0.61 |
+| No missing word (636) | 0.58 | **0.60** | 0.55 | 0.47 | 0.50 | 0.54 |
+| No added word (460) | 0.57 | 0.58 | 0.56 | 0.41 | 0.48 | **0.62** |
+| No word-order error (319) | 0.65 | 0.63 | **0.67** | 0.40 | 0.45 | **0.67** |
+| No non-words (402) | 0.50 | 0.51 | 0.50 | 0.62 | **0.65** | 0.50 |
+
+- **Across verses, the lexical metrics are best on every criterion.**
+- **Coverage fails across verses**, even on meaning (0.28) and omissions (0.47). It is relative to the reference: between two drafts of one verse the reference term cancels, which is why coverage wins the draft comparisons, but across verses the reference's own coverage varies and dominates. A per-verse score (usability, confidence) should leave relative coverage out or use an absolute form.
+- Some features follow the error type they target: coverage-reference with additions and word order, perplexity with word order, coverage-target and coverage-source with non-words.
+
+Still to do: the teams' corrections as references (they post-edit the very draft judged, so they mostly measure edit distance), and the Team 24 and Team 25 error analyses (a transposed layout).
 
 ### 3.4 Baselines
 
@@ -689,6 +721,25 @@ Fitted separately on each domain, the guard set helps on the Bible (additions 0.
   - treat the Bible as the target and news as a sanity check, accepting a few points on news
   - make the guards stricter, firing only on gross failures such as coverage under 50% of the reference's
   - let the §3.3c silver labels decide which combination agrees best with xCOMET-XL on real Bible output
+
+**Fit on the field-test comparisons (October 2026).** `btmetric-fit-combination-field-tests` fits the weights on the field-test draft comparisons with independent references (§3.3g), leaving one team out, and applies them unchanged to every other test. Training on all references taught the fit that chrF3 is useless, because references written from a draft favour that draft; training on independent references fixes that. The detectors are scaled by their spread over all groups, since within a group where one rarely fires its few non-zero values were blown up.
+
+| Weights fit on field tests | Field tests, held-out team (independent / all refs) | Challenge set | WMT system | Human-translation test, all / dynamic (NLT, GNT, CEV) | Silver, same verse | Silver, system level |
+|---|---|---|---|---|---|---|
+| chrF3 alone | 0.594 / 0.542 | 0.868 | **0.747** | 0.83 / **0.42** | 0.623 | 0.743 |
+| **chrF3 + coverage-target** (about 50/50) | **0.648 / 0.615** | **0.936** | 0.582 | 0.82 / 0.41 | **0.638** | **0.763** |
+| chrF3 + coverage-source + coverage-target | 0.641 / 0.620 | 0.911 | 0.540 | 0.80 / 0.39 | 0.626 | 0.746 |
+| chrF3 + detectors | 0.586 / 0.540 | 0.893 | 0.736 | **0.84** / **0.42** | 0.625 | 0.749 |
+| all features | 0.641 / 0.600 | 0.925 | n/a | 0.64 / 0.38 | 0.623 | 0.749 |
+
+(The human-translation test saved only system scores, so features there are scaled by their spread over MT systems: an approximation.)
+
+- **chrF3 + coverage-target is best, or level with the best, on every Bible-domain test**: held-out teams, the challenge set and the silver labels, and level with chrF3 on the human-translation test. The silver margin is small (+1.5 points within verses, +2 at system level, interval ±2.5), so it supports rather than proves the choice.
+- **WMT news is the one test where coverage hurts** (system level 0.75 → 0.58): news raters reward free translation, Bible translation teams prefer drafts that render more of the source.
+- **coverage-source adds the literalness bias** (dynamic translations 0.39) without gains elsewhere; **perplexity and coverage-source together** (in "all features") make other published translations lose to MT.
+- **The detectors are the conservative option:** as good as chrF3 everywhere, and little better.
+
+**Recommendation:** for comparing systems on held-out Bible books, chrF3 + coverage-target with about equal weight (on per-team scaled scores). Keep it out of general-domain evaluation. For per-verse scores use chrF3 alone or an absolute coverage (§3.3g). Still open: the weights rest on 5 independent comparisons and 128 verse pairs, and normalization across languages (§2.4) is not done.
 
 ### 4.2 Expert priors and blending
 
@@ -846,7 +897,7 @@ Each experiment directory typically contains:
 | **4. Features** | Implement chrF3, key terms, alignment coverage and perplexity ratio under low-resource constraints; ablate each against its full-resource version; drop features that add nothing | Core feature set with standalone correlations | **Mostly done**: coverage, key terms, perplexity, trained in-domain and tested on the challenge set and WMT; full-resource ablations not done |
 | **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision | **Partial**: reverse-NLLB scoring and the memorization gate done; fine-tuned and scratch reverse models written but not yet evaluated; LLM options and human back-translation validation not started |
 | **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings | **Partial**: xCOMET-XL silver labels on 162 past test sets, lexical baselines compared (§3.3c); field-test judgments collected and features compared (§3.3g); Bible-only MT systems and quality ladders not trained |
-| **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set and WMT; guards tested. Normalization (§2.4), expert priors and per-language weights not started |
+| **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set, WMT and the field tests; guards tested; recommended weighting chrF3 + coverage-target (§4.1). Normalization (§2.4), expert priors and per-language weights not started |
 | **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines | **Partial**: thresholds on WMT MQM; Bible-domain thresholds and reporting with the paired bootstrap pending |
 | **9. Integration** | Add the metric as a silnlp scorer; optionally project it in quality estimation | Metric in production use | Not started |
 | **10. (Optional) Human check** | Small ranking or usability study on 1–2 minority languages, using `sample_usability.py` | Direct evidence on target-domain correlation | **Partly covered** by the 2025 field-test judgments (§3.3g); a study with independent references would strengthen it |

@@ -209,6 +209,14 @@ uv run btmetric-field-test-agreement score --features chrf3 coverage-source cove
 uv run btmetric-field-test-agreement agree
 ```
 
+`agree` also writes `field_test_agreement_analysis.tsv`: per verse-analysis criterion (same meaning, clear, sounds right, error types, score), how often each feature ranks two analysed verses as the team rated them.
+
+Fit the combined metric on the field-test draft comparisons, leaving one team out, and apply the weights unchanged to the challenge set, WMT, the human-translation test and the silver labels. By default it trains only on comparisons whose references predate the trial (`--train-on all` to use every one):
+
+```
+uv run btmetric-fit-combination-field-tests
+```
+
 ## Significance thresholds
 
 How large a system-level difference must be before humans reliably agree with its direction, from the WMT MQM system pairs:
