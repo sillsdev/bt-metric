@@ -311,7 +311,36 @@ Comparing with the reference cancels per-verse difficulty and the reverse model'
 
 - **Memorization doesn't hide the errors.** No verse was flagged as memorized (`info(ref)` > 0.05 everywhere), and errors survive 72–100% of the time even on Bibles NLLB has seen. French negation is the weakest, plausibly because removing *pas* leaves *ne*.
 - **Source copying broke forced decoding.** NLLB finds English given English near certain, so a copied source outscored the reference in almost every verse. A copy guard fixes it: where the hypothesis's chrF against the source exceeds the reference's by more than 20 points, the hypothesis is scored as adding no information.
-- The gate passes for reverse NLLB scoring. **Next:** the Bible challenge set (real MT outputs), WMT human judgments, minority languages NLLB doesn't cover (fine-tuning the reverse model or training one from scratch), and the generation-based options.
+- The gate passes for reverse NLLB scoring.
+
+*Bible challenge set* (real MT outputs, §3.3a). `bt-nllb` scores only the test sets where NLLB covers both languages, about 13 of 58 (1,300–2,600 rows per error type, fewer for key terms and negation). Share of rows where the unperturbed output scores higher:
+
+| Error | chrF3 | BLEU | bt-nllb |
+|---|---|---|---|
+| addition | 0.49 | 0.89 | 0.87 |
+| repetition | 0.62 | 0.86 | 0.76 |
+| negation | 0.89 | 0.67 | 0.88 |
+| key term | 0.96 | 0.83 | 0.95 |
+| omission | 0.98 | 0.84 | 0.94 |
+| word order | 0.93 | 0.80 | 0.86 |
+| truncation | 1.00 | 0.86 | 0.98 |
+| source copy | 0.98 | 0.95 | **1.00** |
+| wrong verse | 0.98 | 0.95 | **1.00** |
+
+It catches the errors chrF3 misses: additions and repetition. It is near perfect on source copies, which confirms the copy guard, and on wrong verses.
+
+*WMT human judgments* (news; NLLB trained on in-domain text via the judged sets' language pairs; at most 20,000 segment pairs per dataset):
+
+| | Segment level (range over collections) | System level, MQM (95% CI) |
+|---|---|---|
+| chrF3 | 0.47–0.63 | 0.747 (0.717–0.776) |
+| bt-nllb | 0.41–0.56, below chrF3 in every collection | **0.423** (0.388–0.457) |
+| combined (leave one collection out) | equal to chrF3 within 0.01 | 0.719 (0.688–0.749) |
+
+- On news, back-translation adds nothing. Fitted on all collections, it gets 12% of the weight (chrF3 64%, one-sided perplexity 12%, BLEU 10%, coverage 0), yet the combined metric is no better than chrF3 at segment level and slightly worse at system level.
+- At system level `bt-nllb` is **below chance**: on news it tends to prefer the systems humans rated worse. The cause isn't known. One hypothesis is that some WMT systems produce text close to NLLB's own training data, which the reverse model then finds especially informative.
+
+So back-translation is useful as a guard against the Bible-specific failures chrF3 misses (additions, repetition, copies, wrong verses), not as a general quality signal. **Next:** minority languages NLLB doesn't cover, with the fine-tuned and scratch reverse models; check the system-level result on news before giving `bt-nllb` weight in the combined metric; and the generation-based options.
 
 ### 2.4 Per-language normalization
 
