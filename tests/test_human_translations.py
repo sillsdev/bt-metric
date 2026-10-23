@@ -32,3 +32,10 @@ def test_human_translations_are_scored_on_verses_all_of_them_have_and_ranked_aga
     assert summary["human_translation"].tolist() == ["close"]
     assert summary["beats_mt_share"].tolist() == [1.0]
     assert summary["rank"].tolist() == [1]
+
+
+def test_strip_marks_removes_hebrew_points_and_cantillation():
+    from btmetric.analysis.human_translations import strip_marks
+
+    assert strip_marks("\u05d5\u05b0\u05d0\u05b5\u0597\u05dc\u05bc\u05b6\u05d4") == "\u05d5\u05d0\u05dc\u05d4"
+    assert strip_marks("Jesus wept.") == "Jesus wept."

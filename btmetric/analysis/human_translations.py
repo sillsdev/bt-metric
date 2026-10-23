@@ -7,6 +7,8 @@ human translation above most MT outputs; chrF is expected to penalize the freer 
 
 import argparse
 import logging
+import unicodedata
+from dataclasses import replace
 from pathlib import Path
 from typing import Dict, List
 
@@ -43,6 +45,7 @@ class HumanTranslationTest:
         # Only verses every human translation has, so all systems are scored on exactly the same verses.
         present = np.all([[bool(text) for text in verses] for verses in alternatives.values()], axis=0)
         present &= np.array([bool(text.strip()) for text in outputs.evaluation_set.references])
+        present &= np.array([bool(text.strip()) for text in outputs.evaluation_set.sources])
         self._verse_indices = np.flatnonzero(present)
         reference = outputs.evaluation_set.references
         # A human "alternative" identical to the reference would trivially score perfectly.
@@ -86,6 +89,11 @@ class HumanTranslationTest:
         return pd.DataFrame(rows)
 
 
+def strip_marks(text: str) -> str:
+    """The text without combining marks (Unicode category Mn), e.g. pointed Hebrew as unpointed modern Hebrew."""
+    return "".join(char for char in unicodedata.normalize("NFD", text) if unicodedata.category(char) != "Mn")
+
+
 def summarize(scores: pd.DataFrame) -> pd.DataFrame:
     """For each feature and human translation: the share of MT systems it outscores, and its rank among all."""
     rows = []
@@ -124,6 +132,17 @@ def main() -> None:
     parser.add_argument("--vref", type=Path, default=Path("../silnlp/silnlp/assets/vref.txt"))
     parser.add_argument("--features", nargs="+", default=registry.default_names(), choices=registry.names())
     parser.add_argument("--max-verses", type=int, default=3000)
+    parser.add_argument(
+        "--source-extract",
+        help="Score with this extract's verses as the source, e.g. hbo-HEB for Hebrew script where the experiment "
+        "used a transliteration that back-translation models can't read",
+    )
+    parser.add_argument("--source-language", help="Language code features are prepared with for the source, e.g. he")
+    parser.add_argument(
+        "--strip-marks",
+        action="store_true",
+        help="Remove combining marks from the source (Hebrew vowel points and cantillation), as in modern text",
+    )
     parser.add_argument("--output", type=Path, default=Path("data/results/human_translations.tsv"))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -132,6 +151,17 @@ def main() -> None:
     outputs = ExperimentOutputsLoader(args.experiments_root, index).outputs_for(args.test_hash)
     extracts = VerseAlignedExtracts(args.vref)
     vrefs = outputs.evaluation_set.segment_ids
+    if args.source_extract or args.source_language:
+        sources = outputs.evaluation_set.sources
+        if args.source_extract:
+            sources = extracts.verses(args.scripture / f"{args.source_extract}.txt", vrefs)
+        if args.strip_marks:
+            sources = [strip_marks(source) for source in sources]
+        outputs.evaluation_set = replace(
+            outputs.evaluation_set,
+            sources=sources,
+            source_language=args.source_language or args.source_extract,
+        )
     alternatives = {}
     for name in args.alternatives:
         path = args.scripture / f"{name}.txt"
