@@ -867,6 +867,23 @@ For system comparison, knowing **when a difference is meaningful** is as importa
 - **Caveat:** these are high-resource news systems. chrF3's scale and spread differ on minority-language Bibles, so the exact thresholds won't transfer; the coin-flip zone and the plateau will. Thresholds for the Bible domain need Bible system pairs with human or silver labels (§3.3c).
 - Together with the system-pair analysis (§3.4: about 40% of 250-verse comparisons are not significant), this gives a practical rule: report the paired-bootstrap interval, and treat chrF3 differences under about 1 point as no evidence.
 
+
+**Bible-domain thresholds for chrF3 and chrF-B (October 2026).** No human rankings of Bible systems exist, so the silver table stands in (§3.3c): 1,340 pairs of past silnlp systems on the same test set (about 300 verses each), with xCOMET-XL's preference in place of the humans'. System scores are as users see them: corpus chrF3, and chrF-B as corpus chrF3 + 60 × mean coverage + 20 × mean key-term share (`btmetric-significance-thresholds --silver-rows data/results/silver_rows.tsv`).
+
+| System-level difference | chrF3: xCOMET-XL agrees (pairs) | chrF-B: xCOMET-XL agrees (pairs) |
+|---|---|---|
+| 0–0.5 points | 0.61 (362) | 0.57 (251) |
+| 0.5–1 | 0.79 (210) | 0.73 (205) |
+| 1–2 | 0.81 (262) | 0.82 (272) |
+| 2–4 | 0.77 (220) | 0.83 (202) |
+| over 4 | 0.83 (286) | 0.86 (410) |
+| all pairs | 0.75 | 0.77 |
+
+- **The same shape as on news:** under 1 point, agreement is not much better than a coin flip; from 1 point it reaches the low 80s; it levels off near 85%. The plateau is partly xCOMET-XL's own error, so the true ceiling is unknown, and the logistic curve's "90%" differences (13–17 points) are extrapolations.
+- **chrF-B's differences are slightly more trustworthy from 1 point up** (0.82–0.86 against chrF3's 0.77–0.83), and they run larger: coverage and key terms add spread, so more pairs fall in the over-4 band.
+- **Practical rule for chrF-B:** treat differences under 1 point as a tie; 1–2 points as probably real (about 80%); over 2 points as about as reliable as the silver labels can tell (83–86%). Report the paired-bootstrap interval alongside.
+- **Caveats:** silver labels are a metric, not people; many pairs are checkpoints or near-identical configs of one experiment; test sets here are about 300 verses, and a whole held-out book makes smaller differences reliable.
+
 ---
 
 ## 6. Existing Infrastructure and Data
@@ -955,7 +972,7 @@ Each experiment directory typically contains:
 | **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision | **Partial**: reverse-NLLB scoring and the memorization gate done; fine-tuned and scratch reverse models written but not yet evaluated; LLM options and human back-translation validation not started |
 | **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings | **Partial**: xCOMET-XL silver labels on 162 past test sets, lexical baselines compared (§3.3c); field-test judgments collected and features compared (§3.3g); Bible-only MT systems and quality ladders not trained |
 | **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set, WMT and the field tests; guards tested; the recommended metric fixed as chrF-B (§4.1.1). Normalization (§2.4), expert priors and per-language weights not started |
-| **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines | **Partial**: thresholds on WMT MQM; Bible-domain thresholds and reporting with the paired bootstrap pending |
+| **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines | **Partial**: thresholds on WMT MQM, and for chrF3 and chrF-B on the silver Bible system pairs (§5); reporting with the paired bootstrap pending |
 | **9. Integration** | Add the metric as a silnlp scorer; optionally project it in quality estimation | Metric in production use | Not started |
 | **10. (Optional) Human check** | Small ranking or usability study on 1–2 minority languages, using `sample_usability.py` | Direct evidence on target-domain correlation | **Partly covered** by the 2025 field-test judgments (§3.3g); a study with independent references would strengthen it |
 

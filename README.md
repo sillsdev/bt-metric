@@ -240,6 +240,12 @@ How large a system-level difference must be before humans reliably agree with it
 uv run btmetric-significance-thresholds
 ```
 
+The same for chrF3 and chrF-B on Bible system pairs, with xCOMET-XL's preference from the silver table in place of humans':
+
+```
+uv run btmetric-significance-thresholds --silver-rows data/results/silver_rows.tsv --output data/results/significance_thresholds_bible.tsv
+```
+
 The human-translation test can also score with a different source text, e.g. Hebrew script where the experiment used a transliteration that back-translation models can't read:
 
 ```

@@ -3,6 +3,9 @@
 For every pair of systems in the WMT MQM sets that human raters distinguished, the metric's system-level difference
 is compared with the human preference. A logistic curve of P(humans agree with the metric's direction) against the
 size of the difference then gives the difference needed for a chosen confidence.
+
+For the Bible, where no human system rankings exist, the same is done on the silver table (PLAN.md 3.3c): pairs of
+past silnlp systems on the same test set, with xCOMET-XL's preference in place of the humans'.
 """
 
 import argparse
@@ -76,6 +79,47 @@ def system_pairs(outputs_list, feature, exclude: str = r"^(?:ref|Human)") -> pd.
     return pd.DataFrame(rows)
 
 
+def bible_system_scores(table: pd.DataFrame, silver: str) -> pd.DataFrame:
+    """Each system's score on its test set as users would see it: corpus chrF3, chrF-B (corpus chrF3 plus the
+    coefficients times mean coverage and the mean key-term share, as ChrFB.system_score), and the mean silver label."""
+    from sacrebleu.metrics import CHRF
+
+    from ..features.chrf_b import COVERAGE_TARGET_COEFFICIENT, KEY_TERMS_COEFFICIENT
+
+    chrf = CHRF(char_order=6, word_order=0, beta=3)
+    rows = []
+    for (test_hash, system), part in table.groupby(["test_hash", "system"]):
+        corpus = chrf.corpus_score(part["hypothesis"].tolist(), [part["reference"].tolist()]).score
+        coverage = part["coverage-target"].mean()
+        key_terms = part["key-terms"].mean() if part["key-terms"].notna().any() else 0.0
+        rows.append(
+            {
+                "dataset": test_hash,
+                "system": system,
+                "silver": part[silver].mean(),
+                "chrF3": corpus,
+                "chrF-B": corpus
+                + COVERAGE_TARGET_COEFFICIENT * np.nan_to_num(coverage)
+                + KEY_TERMS_COEFFICIENT * key_terms,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def score_pairs(scores: pd.DataFrame, metric: str) -> pd.DataFrame:
+    """Every pair of systems on a test set the silver label tells apart: the metric difference and whether its sign
+    matches the silver preference."""
+    rows = []
+    for dataset, part in scores.groupby("dataset"):
+        silver, values = part["silver"].to_numpy(), part[metric].to_numpy()
+        i, j = np.triu_indices(len(part), k=1)
+        decided = silver[i] != silver[j]
+        difference = values[i][decided] - values[j][decided]
+        agrees = np.sign(difference) == np.sign(silver[i][decided] - silver[j][decided])
+        rows.append(pd.DataFrame({"dataset": dataset, "difference": difference, "agrees": agrees}))
+    return pd.concat(rows, ignore_index=True)
+
+
 def threshold_table(pairs: pd.DataFrame, probabilities: List[float]) -> dict:
     curve = AgreementCurve().fit(pairs["difference"].to_numpy(), pairs["agrees"].to_numpy())
     row = {"pairs": len(pairs), "agreement": float(pairs["agrees"].mean())}
@@ -89,22 +133,36 @@ def main() -> None:
     parser.add_argument("--mqm", type=Path, default=Path("data/external/wmt-mqm/wmt-mqm-human-evaluation.csv"))
     parser.add_argument("--features", nargs="+", default=["chrf3", "chrf3++", "m-chrf3", "bleu", "spbleu"])
     parser.add_argument("--probabilities", nargs="+", type=float, default=[0.7, 0.8, 0.9])
+    parser.add_argument(
+        "--silver-rows",
+        type=Path,
+        help="Use the silver table's Bible system pairs (with chrF3 and chrF-B) instead of WMT MQM",
+    )
+    parser.add_argument("--silver", default="xCOMET-XL", help="With --silver-rows: the label column")
     parser.add_argument("--output", type=Path, default=Path("data/results/significance_thresholds.tsv"))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-    outputs_list = list(WmtMqmLoader(args.mqm).judged_outputs())
+    if args.silver_rows:
+        from .silver_agreement import SilverTable
+
+        scores = bible_system_scores(SilverTable(args.silver_rows).load(), args.silver)
+        pairs_by_feature = {metric: score_pairs(scores, metric) for metric in ["chrF3", "chrF-B"]}
+    else:
+        outputs_list = list(WmtMqmLoader(args.mqm).judged_outputs())
+        pairs_by_feature = {}
+        for name in args.features:
+            feature = registry.get(name)
+            try:
+                pairs_by_feature[feature.name] = system_pairs(outputs_list, feature)
+            finally:
+                feature.close()
     rows, buckets = [], []
-    for name in args.features:
-        feature = registry.get(name)
-        try:
-            pairs = system_pairs(outputs_list, feature)
-        finally:
-            feature.close()
-        rows.append({"feature": feature.name, **threshold_table(pairs, args.probabilities)})
+    for name, pairs in pairs_by_feature.items():
+        rows.append({"feature": name, **threshold_table(pairs, args.probabilities)})
         bins = pd.cut(pairs["difference"].abs(), [0, 0.5, 1, 2, 4, np.inf], include_lowest=True)
         bucket = pairs.groupby(bins, observed=True)["agrees"].agg(["mean", "size"])
-        buckets.append(bucket.assign(feature=feature.name))
+        buckets.append(bucket.assign(feature=name))
     table = pd.DataFrame(rows)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(args.output, sep="\t", index=False)

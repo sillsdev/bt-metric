@@ -29,3 +29,19 @@ def test_threshold_table_reports_pairs_agreement_and_thresholds():
     )
     row = threshold_table(pairs, [0.8])
     assert row["pairs"] == 6 and abs(row["agreement"] - 5 / 6) < 1e-9 and "diff_for_80%" in row
+
+
+def test_bible_pairs_compare_metric_and_silver_preferences_within_each_test_set():
+    from btmetric.analysis.significance import score_pairs
+
+    scores = pd.DataFrame(
+        {
+            "dataset": ["t1", "t1", "t1", "t2", "t2"],
+            "silver": [0.9, 0.5, 0.5, 0.2, 0.3],
+            "chrF-B": [60.0, 50.0, 55.0, 40.0, 30.0],
+        }
+    )
+    pairs = score_pairs(scores, "chrF-B")
+    # t1 has one silver tie (systems 2 and 3), which is skipped; t2's metric disagrees with the silver label.
+    assert sorted(pairs["difference"].tolist()) == [5.0, 10.0, 10.0]
+    assert pairs.groupby("dataset")["agrees"].all().to_dict() == {"t1": True, "t2": False}
