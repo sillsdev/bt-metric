@@ -12,8 +12,10 @@ from typing import Dict, List, Optional, Sequence, Set, Tuple
 
 from machine.corpora import TextFileTextCorpus
 from machine.tokenization import LatinWordTokenizer, WhitespaceTokenizer
+from machine.translation import SymmetrizationHeuristic
 from machine.translation.thot import ThotEflomalWordAlignmentModel, ThotSymmetrizedWordAlignmentModel
 
+from ..scripture.verses import expand_vref, parallel_verses
 from .major_terms import MajorTermList
 
 
@@ -33,7 +35,8 @@ class AlignedVerses:
         self.vrefs = vrefs
         self.english = english
         self.target = target
-        self._row_by_vref = {vref: i for i, vref in enumerate(vrefs)}
+        # A verse range (verses one translation combines) is found from any of its verses.
+        self._row_by_vref = {verse: i for i, vref in enumerate(vrefs) for verse in expand_vref(vref)}
         self.alignments: List[List[Tuple[int, int]]] = []
 
     @classmethod
@@ -41,15 +44,12 @@ class AlignedVerses:
         cls, vref_lines: Sequence[str], english_lines: Sequence[str], target_lines: Sequence[str], excluded: Set[str]
     ) -> "AlignedVerses":
         tokenizer = LatinWordTokenizer()
-        vrefs, english, target = [], [], []
-        for vref, english_verse, target_verse in zip(vref_lines, english_lines, target_lines):
-            english_verse, target_verse = english_verse.strip(), target_verse.strip()
-            if not english_verse or not target_verse or "<range>" in (english_verse, target_verse) or vref in excluded:
-                continue
-            vrefs.append(vref)
-            english.append([token.lower() for token in tokenizer.tokenize(english_verse)])
-            target.append([token.lower() for token in tokenizer.tokenize(target_verse)])
-        return cls(vrefs, english, target)
+        verses = parallel_verses(vref_lines, english_lines, target_lines, excluded)
+        return cls(
+            [vref for vref, _, _ in verses],
+            [[token.lower() for token in tokenizer.tokenize(english)] for _, english, _ in verses],
+            [[token.lower() for token in tokenizer.tokenize(target)] for _, _, target in verses],
+        )
 
     def align(self) -> "AlignedVerses":
         model = self.trained_model()
@@ -72,6 +72,8 @@ class AlignedVerses:
             with model.create_trainer(corpus.tokenize(WhitespaceTokenizer())) as trainer:
                 trainer.train()
                 trainer.save()
+        # silnlp's symmetrization for every aligner, rather than Thot's default (och).
+        model.heuristic = SymmetrizationHeuristic.GROW_DIAG_FINAL_AND
         return model
 
     def row(self, vref: str) -> Optional[int]:
@@ -112,10 +114,9 @@ class RenderingInferrer:
                 continue
             counts: Counter = Counter()
             occurrences = 0
-            for vref in self._terms.vrefs(term):
-                row = verses.row(vref)
-                if row is None:
-                    continue
+            # Each row counts once, even when the term list repeats a verse or a range holds several of the term's
+            # verses, and in verse order, so that ties between equally frequent renderings always break the same way.
+            for row in sorted({verses.row(vref) for vref in self._terms.vrefs(term)} - {None}):
                 positions = self._matcher.positions(verses.english[row], glosses)
                 if not positions:
                     continue

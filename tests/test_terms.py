@@ -52,3 +52,12 @@ def test_validation_reports_precision_and_recall(tmp_path: Path):
     table = pd.DataFrame([vars(row) for row in compare("p", terms, curated, inferred)])
     assert table["correct"].tolist() == [True, False, False]
     assert "Precision 0.500 on 2 terms; recall 0.333" in summarize(table)
+
+
+def test_inference_finds_a_term_verse_inside_a_range_and_counts_each_row_once():
+    # The term list repeats MAT 1:2, and one translation combines MAT 1:2-3, so the term's three entries are one row.
+    terms = MajorTermList(["PN|person"], [["MAT 1:2", "MAT 1:2", "MAT 1:3"]], [["Jesus"]])
+    verses = AlignedVerses(["MAT 1:1", "MAT 1:2-3"], [["then", "left"], ["jesus", "spoke"]], [["kisha"], ["yesu"]])
+    verses.alignments = [[], [(0, 0)]]
+    inferred = RenderingInferrer(terms).infer(verses)
+    assert [(r.rendering, r.occurrences) for r in inferred] == [("yesu", 1)]

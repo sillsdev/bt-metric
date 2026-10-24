@@ -28,6 +28,8 @@ from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 import pandas as pd
 
+from ..scripture.verses import expand_vref
+
 LOGGER = logging.getLogger(__name__)
 
 BOOKS = {
@@ -216,15 +218,6 @@ class _VerseReader:
 
 def _vref(book: str, chapter: int, verse: int, last: Optional[str]) -> str:
     return f"{book} {chapter}:{verse}" + (f"-{last}" if last and int(last) != verse else "")
-
-
-def expand_vref(vref: str) -> List[str]:
-    """The single verses of a reference that may be a range ("MAT 13:5-6")."""
-    match = re.match(r"^(\S+) (\d+):(\d+)(?:-(\d+))?$", vref)
-    if not match:
-        return [vref]
-    book, chapter, first, last = match.group(1), match.group(2), int(match.group(3)), match.group(4)
-    return [f"{book} {chapter}:{v}" for v in range(first, int(last or first) + 1)]
 
 
 def read_workbook(path: Path) -> Iterator[Tuple[str, str, pd.DataFrame]]:

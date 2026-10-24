@@ -19,6 +19,7 @@ from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 import pandas as pd
 
 from ..scripture.corpora import EvaluationLanguages
+from ..scripture.verses import parallel_verses
 
 LOGGER = logging.getLogger(__name__)
 
@@ -64,16 +65,15 @@ class BibleCorpus(TrainingCorpus):
         if source_path is None or target_path is None:
             LOGGER.warning(f"No Bible text for {source_language} or {target_language}")
             return None
-        vrefs = self.vref_path.read_text(encoding="utf-8").splitlines()
-        source_lines = source_path.read_text(encoding="utf-8-sig").splitlines()
-        target_lines = target_path.read_text(encoding="utf-8-sig").splitlines()
-        source, target = [], []
-        for vref, s, t in zip(vrefs, source_lines, target_lines):
-            s, t = s.strip(), t.strip()
-            if s and t and "<range>" not in (s, t) and vref not in excluded:
-                source.append(s)
-                target.append(t)
-        return ParallelText(source, target, f"bible:{source_path.stem}:{target_path.stem}:{_digest(excluded)}")
+        verses = parallel_verses(
+            self.vref_path.read_text(encoding="utf-8").splitlines(),
+            source_path.read_text(encoding="utf-8-sig").splitlines(),
+            target_path.read_text(encoding="utf-8-sig").splitlines(),
+            excluded,
+        )
+        # The key says verse ranges are merged, so models cached from text that dropped them aren't reused.
+        key = f"bible:{source_path.stem}:{target_path.stem}:{_digest(excluded)}:merged-ranges"
+        return ParallelText([source for _, source, _ in verses], [target for _, _, target in verses], key)
 
     def monolingual(self, language: str, excluded: FrozenSet[str]) -> Optional[MonolingualText]:
         path = self.extract_path(language)

@@ -16,7 +16,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from ..datasets.field_tests import expand_vref
+from ..scripture.verses import expand_vref
 from ..evaluation.loaders import ExperimentOutputsLoader
 from ..meta_eval.agreement import PairwiseAgreement
 from ..meta_eval.runner import FeatureRegistry
