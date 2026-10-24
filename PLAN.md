@@ -218,7 +218,7 @@ Coverage's advantage appears only on errors that are defined by length or by con
 - Coverage stays **out of the metric's core**.
 - `coverage-target-detector` is kept as an **optional guard** against loops and runaway output, which are frequent in low-resource MT and invisible to chrF3. It is excluded from the weighting until Bible-domain human judgments support it.
 - The remaining effort goes to the components with clearer prospects:
-  - back-translation scoring (§2.3, Phase 5), the only accuracy signal that doesn't rest on surface overlap
+  - reverse-model confidence (§2.3, Phase 5), the only accuracy signal that doesn't rest on surface overlap
   - the Bible-domain human check (Phase 10), which is now the main way to settle what helps on Scripture
 
 **Detector results** (October 2026). The detectors are silent unless the hypothesis keeps under 70% of the reference's coverage, so on mild errors they mostly tie:
@@ -257,7 +257,7 @@ This confirms the decision above: a guard against runaway output, not a source o
 
 ### 2.3 Back-translation: options, cost and memorization
 
-Many projects have no human back-translation, so any back-translation feature has to **generate or score with a model**. No existing back-translation is required.
+Many projects have no human back-translation, so any back-translation feature has to **generate or score with a model**. No existing back-translation is required. The scoring option, which generates no back-translation, is called **reverse-model confidence**: how confident a model translating from the target back to the source is in the real source, given the hypothesis.
 
 **Memorization is the central risk.** NLLB and LLMs have been pretrained on Bible translations in many major languages. A back-translation model can **recall the canonical English verse instead of translating the hypothesis**. That hides omissions, negation flips and mistranslations, which are exactly the errors back-translation is meant to catch. The risk applies to any model with a pretrained major-language decoder, NMT or LLM.
 
@@ -293,7 +293,7 @@ Comparing with the reference cancels per-verse difficulty and the reverse model'
 
 **Phase 5 status** (October 2026).
 
-*Reverse NLLB scoring* (`bt-nllb`, `btmetric/features/back_translation.py`). NLLB-200 distilled 600M scores the source given the hypothesis by forced decoding; no back-translation is generated. One fp16 forward pass per text, on the GPU.
+*Reverse-model confidence* (`bt-nllb`, `btmetric/features/back_translation.py`). NLLB-200 distilled 600M, run from the target back to the source, scores the source given the hypothesis by forced decoding; no back-translation is generated. One fp16 forward pass per text, on the GPU.
 
 *Memorization gate* (`btmetric-memorization-gate`). This is a worst case for memorization: the references are German (GCLNR00), French (TOB) and Russian (Synod) Bibles, the kind of text NLLB was trained on, with English BSB as the source. 400 verses per language get each mild perturbation; key terms and negation words are inferred by alignment. Share of verses where the injected error lowers the score:
 
@@ -311,7 +311,7 @@ Comparing with the reference cancels per-verse difficulty and the reverse model'
 
 - **Memorization doesn't hide the errors.** No verse was flagged as memorized (`info(ref)` > 0.05 everywhere), and errors survive 72–100% of the time even on Bibles NLLB has seen. French negation is the weakest, plausibly because removing *pas* leaves *ne*.
 - **Source copying broke forced decoding.** NLLB finds English given English near certain, so a copied source outscored the reference in almost every verse. A copy guard fixes it: where the hypothesis's chrF against the source exceeds the reference's by more than 20 points, the hypothesis is scored as adding no information.
-- The gate passes for reverse NLLB scoring.
+- The gate passes for reverse-model confidence.
 
 *Bible challenge set* (real MT outputs, §3.3a). `bt-nllb` scores only the test sets where NLLB covers both languages, about 13 of 58 (1,300–2,600 rows per error type, fewer for key terms and negation). Share of rows where the unperturbed output scores higher:
 
@@ -337,7 +337,7 @@ It catches the errors chrF3 misses: additions and repetition. It is near perfect
 | bt-nllb | 0.41–0.56, below chrF3 in every collection | **0.423** (0.388–0.457) |
 | combined (leave one collection out) | equal to chrF3 within 0.01 | 0.719 (0.688–0.749) |
 
-- On news, back-translation adds nothing. Fitted on all collections, it gets 12% of the weight (chrF3 64%, one-sided perplexity 12%, BLEU 10%, coverage 0), yet the combined metric is no better than chrF3 at segment level and slightly worse at system level.
+- On news, reverse-model confidence adds nothing. Fitted on all collections, it gets 12% of the weight (chrF3 64%, one-sided perplexity 12%, BLEU 10%, coverage 0), yet the combined metric is no better than chrF3 at segment level and slightly worse at system level.
 - At system level `bt-nllb` is **below chance**: on news it tends to prefer the systems humans rated worse.
 - **Why: it rewards literalness.** By MQM set, it works on WMT 2020 (en–de 0.81, where systems differ widely in quality) but is below chance from 2021 on (0.26–0.42 for en→de and en→ru), where many strong systems differ mainly in fluency and style.
   - On those sets its system ranking tracks alignment coverage closely: Spearman 0.81–0.90 with coverage-source and 0.62–0.78 with coverage-target, against 0.29 with output length and −0.14 on average with human MQM.
@@ -345,7 +345,7 @@ It catches the errors chrF3 misses: additions and repetition. It is near perfect
   - For zh→en it follows chrF3 and perplexity instead, likely because word alignment with Chinese is weaker.
 - **Risk for Bible translation:** a literalness signal may penalize valid dynamic translations, the failure the metric is meant to fix. The decisive check is `bt-nllb` on the Hebrew → English NASB human-translation test (§3.3b). Until it passes, `bt-nllb` gets no weight in the combined metric beyond guarding against gross errors.
 
-So back-translation is useful as a guard against the Bible-specific failures chrF3 misses (additions, repetition, copies, wrong verses), not as a general quality signal. **Next:** minority languages NLLB doesn't cover, with the fine-tuned and scratch reverse models; check the system-level result on news before giving `bt-nllb` weight in the combined metric; and the generation-based options.
+So reverse-model confidence is useful as a guard against the Bible-specific failures chrF3 misses (additions, repetition, copies, wrong verses), not as a general quality signal. **Next:** minority languages NLLB doesn't cover, with the fine-tuned and scratch reverse models; check the system-level result on news before giving `bt-nllb` weight in the combined metric; and the generation-based options.
 
 ### 2.4 Per-language normalization
 
@@ -713,7 +713,7 @@ COMET-22 was trained on WMT 2017–20 direct-assessment data, so its scores on t
 - The combination exploits this: it fixes chrF3's blind spots for additions and repetition at a small cost on omission, truncation and negation.
 - Weights fit on all test sets: coverage-target 15%, spBLEU 15%, BLEU 11%, chrF3 and m-chrF3 8% each, one-sided perplexity 7%, coverage-reference 7%, coverage-source 6%, bt-nllb 5%; the detectors, key terms and two-sided perplexity share the rest.
 - **Caveat: these are synthetic errors.** The combination is trained and tested on the same kinds of injected error, in held-out languages. That shows the features can catch these errors together, not that the combination tracks human judgments of quality.
-- **These weights conflict with the WMT fit** (§2.2.2). coverage-target gets the most weight here and none on news, where coverage is below chance because it rewards literal translations. Phase 7 has to resolve this: catch the Bible failures (additions, loops, copies) without rewarding literalness. One option is to use coverage and back-translation only as guards that penalize gross deviations, as the detector variants do, while chrF3-like features carry the general quality signal. The §3.3c silver labels on real Bible output in major languages are the evidence for choosing.
+- **These weights conflict with the WMT fit** (§2.2.2). coverage-target gets the most weight here and none on news, where coverage is below chance because it rewards literal translations. Phase 7 has to resolve this: catch the Bible failures (additions, loops, copies) without rewarding literalness. One option is to use coverage and reverse-model confidence only as guards that penalize gross deviations, as the detector variants do, while chrF3-like features carry the general quality signal. The §3.3c silver labels on real Bible output in major languages are the evidence for choosing.
 
 **Guards: a first test** (October 2026). Feature sets were compared on the challenge set (leave one test set out) and on the WMT human judgments. "Guards" replace continuous coverage with the coverage detectors, which react only when the hypothesis keeps under 70% of the reference's coverage.
 
@@ -898,7 +898,7 @@ Research code lives in this repository and uses silnlp as a library. The final m
 | Key term accuracy | Major Biblical Terms assets (`Major-metadata`, `Major-vrefs`, en/fr/es/id/pt glosses); curated renderings in `MT/terms` for ~1,100 projects; Thot aligners in `silnlp/alignment/machine_aligner.py`; preliminary proper-noun work in `scripts/IDQ/key_terms.ipynb` | Rendering inference by alignment (§2.2.1) for projects without renderings; matching that copes with morphology |
 | Alignment coverage | `silnlp/alignment/utils.py` `compute_alignment_scores` (eflomal, fast_align; symmetrized alignment output) | Coverage features; tokenization beyond `LatinWordTokenizer` for scripts that don't separate words with spaces |
 | Back-translation by LLM with in-context examples | `remote_llm_config.py`, `local_llm_config.py`, `example_retrieval.py` (TF-IDF, embedding and coverage-aware selection), response caching | Reverse-direction experiment configs; memorization gate |
-| Back-translation scoring | Model loading and `compute_transition_scores` in `seq2seq_config.py` / `local_llm_config.py` (scores the model's own output only) | Scoring of given text, plus the memorized-prior term `P(src \| ∅)` |
+| Reverse-model confidence | Model loading and `compute_transition_scores` in `seq2seq_config.py` / `local_llm_config.py` (scores the model's own output only) | Scoring of given text, plus the memorized-prior term `P(src \| ∅)` |
 | Perturbation suite | `silnlp/common/add_noise_to_corpus.py` | Perturbations that change meaning |
 | System pairs, quality ladders | ClearML experiment history; `combine_scores.py` | Selecting pairs that share held-out books |
 | Downstream use | `quality_estimation.py` / `linear_regression.py` (confidence → projected chrF3 → usability labels) | Could project the new metric instead of chrF3 later |
@@ -969,7 +969,7 @@ Each experiment directory typically contains:
 | **2. Baselines** | Run the §3.4 baselines on everything, including the human-translation test from §3.3b | Baseline results; confirmation of chrF3's failure modes | **Done** (TER skipped as too slow; LLM judge deferred) |
 | **3. Perturbation suite** | Implement perturbations that change meaning; calibrate their frequencies against real MT errors | Bible challenge set, plus the memorization gate | **Done**: synthetic and real-error challenge sets, severities, calibration, memorization gate |
 | **4. Features** | Implement chrF3, key terms, alignment coverage and perplexity ratio under low-resource constraints; ablate each against its full-resource version; drop features that add nothing | Core feature set with standalone correlations | **Mostly done**: coverage, key terms, perplexity, trained in-domain and tested on the challenge set and WMT; full-resource ablations not done |
-| **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision | **Partial**: reverse-NLLB scoring and the memorization gate done; fine-tuned and scratch reverse models written but not yet evaluated; LLM options and human back-translation validation not started |
+| **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision | **Partial**: reverse-model confidence with NLLB and the memorization gate done; fine-tuned and scratch reverse models written but not yet evaluated; LLM options and human back-translation validation not started |
 | **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings | **Partial**: xCOMET-XL silver labels on 162 past test sets, lexical baselines compared (§3.3c); field-test judgments collected and features compared (§3.3g); Bible-only MT systems and quality ladders not trained |
 | **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set, WMT and the field tests; guards tested; the recommended metric fixed as chrF-B (§4.1.1). Normalization (§2.4), expert priors and per-language weights not started |
 | **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines | **Partial**: thresholds on WMT MQM, and for chrF3 and chrF-B on the silver Bible system pairs (§5); reporting with the paired bootstrap pending |

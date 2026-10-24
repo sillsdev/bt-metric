@@ -158,10 +158,10 @@ Beyond the baselines, these features are opt-in because each trains a model per 
 | `coverage-*-detector` | The same as error detectors: 0 while the hypothesis keeps 70% of the reference's coverage, penalized below that |
 | `key-terms`, `key-terms-names` | Share of the reference's key term renderings the hypothesis also uses (all terms, or proper names only) |
 | `perplexity`, `perplexity-one-sided` | Distance between the hypothesis's and the reference's character perplexity under a 5-gram model of the target language (one-sided: only being less predictable counts) |
-| `bt-nllb` | How much the hypothesis tells a reverse NLLB-200 model about the source (forced decoding, no generated back translation), relative to the reference. Verses whose reference tells the model little beyond what it predicts with no input (memorized from Bibles) get no score, and a hypothesis that copies the source gets no credit. Runs on the GPU; NaN for languages NLLB doesn't cover |
+| `bt-nllb` | Reverse-model confidence: how confident a reverse NLLB-200 model (target to source) is in the source given the hypothesis, relative to the reference. It scores the real source by forced decoding and generates no back-translation. Verses whose reference tells the model little beyond what it predicts with no input (memorized from Bibles) get no score, and a hypothesis that copies the source gets no credit. Runs on the GPU; NaN for languages NLLB doesn't cover |
 | `bt-nllb-finetuned`, `bt-scratch` | The same with a reverse model trained per project for languages NLLB lacks: NLLB fine-tuned in the reverse direction, or a small transformer trained from scratch (which can't have memorized the scored verses). Trained on the GPU and cached under `data/models/reverse` |
 
-PLAN.md §2.2.2 and the Phase 5 status in §2.3 record how each fares. On human judgments of news, none adds to chrF3: coverage and back-translation both reward literal translations there. On the Bible challenge set they catch the errors chrF3 misses (additions, repetition, copies).
+PLAN.md §2.2.2 and the Phase 5 status in §2.3 record how each fares. On human judgments of news, none adds to chrF3: coverage and reverse-model confidence both reward literal translations there. On the Bible challenge set they catch the errors chrF3 misses (additions, repetition, copies).
 
 Fit the combined metric on human judgments (WMT MQM and DA), with in-domain training, and compare it with each feature alone at segment and system level. `--add` adds features to an existing score table:
 
@@ -176,7 +176,7 @@ Check which features catch the omissions and additions that WMT MQM annotators m
 uv run btmetric-check-mqm-error-categories --major-only
 ```
 
-Check whether back-translation scoring survives NLLB's memorization of the Bible: inject each error type into other Bibles (German, French, Russian by default) as references for English sources, and count how often the perturbed reference scores lower than the clean one, and how many verses count as memorized:
+Check whether reverse-model confidence survives NLLB's memorization of the Bible: inject each error type into other Bibles (German, French, Russian by default) as references for English sources, and count how often the perturbed reference scores lower than the clean one, and how many verses count as memorized:
 
 ```
 uv run btmetric-memorization-gate
@@ -246,7 +246,7 @@ The same for chrF3 and chrF-B on Bible system pairs, with xCOMET-XL's preference
 uv run btmetric-significance-thresholds --silver-rows data/results/silver_rows.tsv --output data/results/significance_thresholds_bible.tsv
 ```
 
-The human-translation test can also score with a different source text, e.g. Hebrew script where the experiment used a transliteration that back-translation models can't read:
+The human-translation test can also score with a different source text, e.g. Hebrew script where the experiment used a transliteration that reverse models can't read:
 
 ```
 uv run btmetric-test-human-translations --features bt-nllb --source-extract hbo-HEB --source-language he --strip-marks
@@ -266,7 +266,7 @@ Generated and downloaded files go in `data/`, which is not committed.
 - `btmetric/scripture`: Scripture extracts and Paratext project metadata (back translation pairing, Bible corpora)
 - `btmetric/datasets`: downloading public human-judgment datasets, and collecting the field-test judgments
 - `btmetric/evaluation`: the common data model (evaluation sets, system outputs, human judgments) and its loaders
-- `btmetric/features`: the `Feature` interface, the baselines (chrF, BLEU, TER, COMET), the metric features (alignment coverage, key terms, perplexity, back-translation scoring), reverse models, and the in-domain training corpora
+- `btmetric/features`: the `Feature` interface, the baselines (chrF, BLEU, TER, COMET), the metric features (alignment coverage, key terms, perplexity, reverse-model confidence), reverse models, and the in-domain training corpora
 - `btmetric/terms`: Major Biblical Terms, rendering and negation-word inference by alignment, and its validation
 - `btmetric/perturbations`: the perturbation library, challenge sets (synthetic and real errors) and calibration against real error rates
 - `btmetric/combination`: the pairwise log-linear combination, fit on challenge-set rows or WMT human judgments
