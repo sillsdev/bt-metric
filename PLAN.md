@@ -879,9 +879,9 @@ For system comparison, knowing **when a difference is meaningful** is as importa
 | over 4 | 0.83 (286) | 0.86 (410) |
 | all pairs | 0.75 | 0.77 |
 
-- **The same shape as on news:** under 1 point, agreement is not much better than a coin flip; from 1 point it reaches the low 80s; it levels off near 85%. The plateau is partly xCOMET-XL's own error, so the true ceiling is unknown, and the logistic curve's "90%" differences (13–17 points) are extrapolations.
+- **The same shape as on news:** under half a point, agreement is not much better than a coin flip; from half a point to 1 it is in the 70s; from 1 point it reaches the low 80s; it levels off near 85%. The plateau is partly xCOMET-XL's own error, so the true ceiling is unknown, and the logistic curve's "90%" differences (13–17 points) are extrapolations.
 - **chrF-B's differences are slightly more trustworthy from 1 point up** (0.82–0.86 against chrF3's 0.77–0.83), and they run larger: coverage and key terms add spread, so more pairs fall in the over-4 band.
-- **Practical rule for chrF-B:** treat differences under 1 point as a tie; 1–2 points as probably real (about 80%); over 2 points as about as reliable as the silver labels can tell (83–86%). Report the paired-bootstrap interval alongside.
+- **Practical rule for chrF-B:** treat differences under 0.5 points as a tie; 0.5–1 points as weak evidence (about 73%); 1–2 points as probably real (about 80%); over 2 points as about as reliable as the silver labels can tell (83–86%). Report the paired-bootstrap interval alongside.
 - **Caveats:** silver labels are a metric, not people; many pairs are checkpoints or near-identical configs of one experiment; test sets here are about 300 verses, and a whole held-out book makes smaller differences reliable.
 
 ---
