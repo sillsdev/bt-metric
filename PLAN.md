@@ -544,7 +544,7 @@ None beats chrF3 alone; the detectors mostly tie. They matter only in combinatio
 
 References come from the latest extract of the team's project. **Many are not independent of the drafts.** Several second-trial projects added the judged verses after the trial by editing AI drafts. In Team 18 and Team 20 about half the "references" are near-copies of one draft, and they favour Draft A while the teams preferred Draft B (Team 20: 40 to 7). So each verse records the first extract it appears in, and a reference counts as independent only if it predates the trial's drafts (taken as just after the extracts the trial models trained on). For Team 3, the experiment configs and the drafts' orthography confirm the project; the MT source is `rw-SRC`, although the sheets show SRC2.
 
-The teams themselves agree on only **63%** of verse preferences (130 verse pairs that two groups or judges both decided), the ceiling for any metric. Agreement of each feature with the teams (`btmetric-field-test-agreement`), with metric ties counting as wrong:
+The teams themselves agree on only **63%** of verse preferences (130 verse pairs that two groups or judges both decided), so the judgments are noisy. This is not an upper limit for a metric: if each team picks the better draft 75% of the time, two teams agree only 62.5% of the time, while a metric that always picks the better draft agrees with a team 75% of the time. The 63% also comes from different teams than the independent-reference pairs below (mostly Team 12, Team 13 and Team 2). Agreement of each feature with the teams (`btmetric-field-test-agreement`), with metric ties counting as wrong:
 
 | Feature | Verse preference, independent refs (128 pairs) | All refs (413) | Model comparisons won, independent (all) | Usability, independent |
 |---|---|---|---|---|
@@ -556,7 +556,7 @@ The teams themselves agree on only **63%** of verse preferences (130 verse pairs
 | BLEU | 0.48 | 0.49 | 2/5 (5/14) | 0.51 |
 | coverage-reference | 0.46 | 0.45 | 4/5 (8/14) | 0.54 |
 
-- **Coverage matches the human ceiling, the opposite of WMT news**, where it rewarded literal translation (§2.2.2). These teams prefer the draft that renders more of the source, which suits Bible drafting, where omissions are costly.
+- **Coverage does best, the opposite of WMT news**, where it rewarded literal translation (§2.2.2). These teams prefer the draft that renders more of the source, which suits Bible drafting, where omissions are costly.
 - **Coverage barely depends on the reference.** It is relative to the reference, which mostly cancels between two drafts of one verse, so it survives references written from a draft (Team 20: chrF3 0.17, coverage-target 0.81).
 - **chrF3 and coverage carry different information.** Their verse-level differences hardly correlate (r = 0.19). Adding standardized chrF3 and coverage-target gives 0.68 on independent references.
 - **Teams vary.** chrF3 does better on Team 1, Team 13 and Team 16; coverage on Team 2, Team 14 and Team 3.
