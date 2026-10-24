@@ -17,6 +17,7 @@ from ..features.alignment import AlignerCache, AlignmentCoverage, ReferenceAncho
 from ..features.back_translation import BackTranslationInfo
 from ..features.base import Feature
 from ..features.chrf import ChrF
+from ..features.chrf_b import ChrFB
 from ..features.comet import Comet
 from ..features.corpora import BibleCorpus, TrainingCorpus
 from ..features.key_terms import InferredRenderings, KeyTermAccuracy
@@ -203,6 +204,12 @@ class FeatureRegistry:
             "coverage-reference-detector": lambda: ReferenceAnchoredCoverage(
                 aligners=self._aligners, detector_tolerance=0.3
             ),
+            # The recommended metric (PLAN.md 4.1): chrF3, coverage of the hypothesis and key terms, in chrF3 points.
+            "chrf-b": lambda: ChrFB(
+                ChrF(0),
+                AlignmentCoverage("target", aligners=self._aligners),
+                KeyTermAccuracy(renderings=self._renderings),
+            ),
         }
         # Run only when asked for: neural features need a GPU; sacrebleu's TER is pure Python and takes over an hour
         # on the WMT sets while ranking almost exactly like chrF and BLEU; coverage trains an aligner per language
@@ -226,6 +233,7 @@ class FeatureRegistry:
             "bt-nllb",
             "bt-nllb-finetuned",
             "bt-scratch",
+            "chrf-b",
         }
 
     def names(self) -> List[str]:

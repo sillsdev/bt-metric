@@ -132,6 +132,21 @@ Infer key term renderings by aligning an English Bible with each project's text 
 uv run btmetric-validate-rendering-inference --projects 30
 ```
 
+## chrF-B
+
+The recommended metric for comparing systems on held-out Bible books (PLAN.md §4.1.1), pronounced "chirf-bee":
+
+> chrF-B = chrF3 + 60 × coverage-target + 20 × key terms
+
+in chrF3 points. It scores with every command that takes `--features`, e.g.:
+
+```
+uv run btmetric-evaluate-challenge-set --features chrf-b
+uv run btmetric-test-human-translations --features chrf-b --output data/results/human_translations_chrf_b.tsv
+```
+
+It trains an aligner and infers key-term renderings from the target project's Bible text (with the scored verses left out), so it needs the Scripture extracts on the mounted bucket. Without enough Bible text it falls back to the parts it can score.
+
 ## Metric features
 
 Beyond the baselines, these features are opt-in because each trains a model per language pair. Models train on a Bible-sized amount of text **in the domain being scored** (`btmetric/features/corpora.py`): Bible text for Scripture, and news for WMT, from OPUS News Commentary or, failing that, the judged sets' own source-reference pairs scored in folds. The segments being scored are always left out.

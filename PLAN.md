@@ -766,7 +766,37 @@ Fitted separately on each domain, the guard set helps on the Bible (additions 0.
 
 (The 10% and 30% rows use the full-data fit for the field tests rather than leaving each team out.) Up to 20% nothing else changes beyond noise, while CEV, GNT and NLT beat more MT systems. The gain rests on one human-translation test, and WMT can't check key terms.
 
-**Recommendation:** for comparing systems on held-out Bible books, **chrF3 + coverage-target + key terms, about 45 / 35 / 20** (on per-group scaled scores; key terms' share is a prior, the other two are fitted). Report beside it key-term mismatches (which terms differ) and detector warnings (§3.3g). Keep the score out of general-domain evaluation, and for per-verse scores use chrF3 alone or an absolute coverage. Drop perplexity, coverage-source and bt-nllb. Still open: the weights rest on 5 independent comparisons and 128 verse pairs, and normalization across languages (§2.4) is not done.
+**Recommendation:** for comparing systems on held-out Bible books, chrF3 + coverage-target + key terms (key terms' share a prior, the other two fitted). Report beside it key-term mismatches (which terms differ) and detector warnings (§3.3g). Keep the score out of general-domain evaluation, and for per-verse scores use chrF3 alone or an absolute coverage. Drop perplexity, coverage-source and bt-nllb.
+
+### 4.1.1 chrF-B
+
+The recommended metric, fixed as **chrF-B** ("chirf-bee", B for Bible; feature `chrf-b`, `btmetric/features/chrf_b.py`):
+
+> chrF-B = chrF3 + 60 × coverage-target + 20 × key terms
+
+in chrF3 points. coverage-target is the share of the hypothesis aligned to the source minus the reference's share; key terms is the share of the reference's inferred key-term renderings the hypothesis also uses. A verse with no coverage or key-term score (no Bible text to align, no key terms in its reference) adds 0 for that part, the same for every system. At system level chrF3 is the corpus score and the other two are means over verses.
+
+- **Fixed coefficients instead of per-language scaling.** Each feature's median spread across the silver test sets and field-test teams turns the scaled weights into chrF3 points (coverage 137, key terms 22). Fixed coefficients make scores comparable between experiments and keep the scaled version's agreement; results barely move with them halved or doubled.
+- **Coverage at 60, not 137.** Coverage of the hypothesis rises when unaligned words are dropped, so a large coefficient lets it excuse omissions (85% caught at 137). Between 30 and 135 the field tests and silver labels can't tell coefficients apart; on the challenge set the coefficient trades omissions against additions and loops (30: omission 0.95, addition 0.79; 60: 0.92 and 0.89, the best mean). 60 was chosen.
+- **Effective weights:** about 57% chrF3, 19% coverage-target and 23% key terms of the typical difference between two verses' scores (each feature's spread in chrF3 points: 15, about 5 and about 6). These vary by language with the features' spreads (coverage 12–27%, key terms 17–32%).
+
+chrF-B scored directly on every test, against chrF3:
+
+| Test | chrF3 | chrF-B |
+|---|---|---|
+| Field tests: verse preference, independent / all references | 0.594 / 0.542 | **0.641 / 0.613** |
+| Field tests: model comparisons won, independent / all | 3/5, 8/14 | **5/5, 10/14** |
+| Field tests: usability, independent / all | 0.57 / 0.60 | **0.61 / 0.63** |
+| Field tests: "would this draft help", independent / all | 0.51 / 0.44 | **0.56 / 0.47** |
+| Challenge set: mean over error types | 0.868 | **0.942** |
+| Challenge set: weighted by real MT error rates | 0.731 | **0.940** |
+| Challenge set: addition / repetition (loops) | 0.49 / 0.62 | **0.91 / 0.95** |
+| Challenge set: omission / truncation / negation removed | **0.98 / 0.995 / 0.89** | 0.94 / 0.97 / 0.82 |
+| Silver (xCOMET-XL): same verse / system level | 0.623 / 0.743 | **0.640 / 0.769** |
+| Silver (xCOMET-XL-QE): same verse / system level | 0.570 / 0.669 | **0.592 / 0.706** |
+| Human-translation test: published translations' mean share of MT beaten | 0.83 | **0.85** (CEV 0 → 0.18, NET 0.77 → 0.91) |
+
+chrF-B is better than chrF3 on every Bible-domain test overall; it gives up a few points on omissions, truncation and removed negations. It is not for general-domain text (on WMT news, coverage cost 17 points at system level), it rates single verses no better than chrF3, and dynamic translations still lose to most MT systems against a single reference. Still open: the weights rest on 5 independent comparisons and 128 verse pairs, key terms use inferred renderings only (curated Paratext renderings could replace them where a project has them), and normalization across languages (§2.4) is not done.
 
 ### 4.2 Expert priors and blending
 
@@ -924,7 +954,7 @@ Each experiment directory typically contains:
 | **4. Features** | Implement chrF3, key terms, alignment coverage and perplexity ratio under low-resource constraints; ablate each against its full-resource version; drop features that add nothing | Core feature set with standalone correlations | **Mostly done**: coverage, key terms, perplexity, trained in-domain and tested on the challenge set and WMT; full-resource ablations not done |
 | **5. Back-translation comparison** | Compare from-scratch reverse model, reverse NLLB and small open-weights LLM (each in generation and scoring mode), the current hosted LLM setup as a quality upper bound, and no back-translation. Judge on (1) memorization gate, (2) correlation, (3) cost per book. Validate against human back-translations (§3.3e). | Back-translation decision | **Partial**: reverse-NLLB scoring and the memorization gate done; fine-tuned and scratch reverse models written but not yet evaluated; LLM options and human back-translation validation not started |
 | **6. Silver data** | Train Bible-only MT systems and quality ladders into major languages with contamination controls; produce silver labels | Bible-domain system rankings | **Partial**: xCOMET-XL silver labels on 162 past test sets, lexical baselines compared (§3.3c); field-test judgments collected and features compared (§3.3g); Bible-only MT systems and quality ladders not trained |
-| **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set, WMT and the field tests; guards tested; recommended weighting chrF3 + coverage-target + key terms at a fixed 20% (§4.1). Normalization (§2.4), expert priors and per-language weights not started |
+| **7. Weights** | Normalization, global fitting, expert priors and blend, per-language experiment (§4.3) | Final weighting approach | **Partial**: pairwise model and leave-one-out validation; fits on the challenge set, WMT and the field tests; guards tested; the recommended metric fixed as chrF-B (§4.1.1). Normalization (§2.4), expert priors and per-language weights not started |
 | **8. Significance** | Calibrate score differences against human agreement; build bootstrap tooling | Interpretation guidelines | **Partial**: thresholds on WMT MQM; Bible-domain thresholds and reporting with the paired bootstrap pending |
 | **9. Integration** | Add the metric as a silnlp scorer; optionally project it in quality estimation | Metric in production use | Not started |
 | **10. (Optional) Human check** | Small ranking or usability study on 1–2 minority languages, using `sample_usability.py` | Direct evidence on target-domain correlation | **Partly covered** by the 2025 field-test judgments (§3.3g); a study with independent references would strengthen it |
