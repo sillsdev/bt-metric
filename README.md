@@ -145,7 +145,7 @@ uv run btmetric-evaluate-challenge-set --features chrf-b
 uv run btmetric-test-human-translations --features chrf-b --output data/results/human_translations_chrf_b.tsv
 ```
 
-It trains an aligner and infers key-term renderings from the target project's Bible text (with the scored verses left out), so it needs the Scripture extracts on the mounted bucket. Without enough Bible text it falls back to the parts it can score.
+It trains an aligner and infers key-term renderings from the target project's Bible text (with the scored verses left out), so it needs the Scripture extracts on the mounted bucket. Without enough Bible text it falls back to the parts it can score. Verses are paired and aligned as silnlp's `chrf-b` scorer does them, with grow-diag-final-and symmetrization, so the two give the same scores.
 
 ## Metric features
 
@@ -155,6 +155,8 @@ Beyond the baselines, these features are opt-in because each trains a model per 
 |---|---|
 | `coverage-source`, `coverage-target` | Share of source (target) words aligned to the other side, weighted by translation probability, relative to the reference: omissions (additions, loops, untranslated text) |
 | `coverage-reference` | Omissions measured only against the source content the reference expresses, so a hypothesis is never asked to be more literal than the reference |
+| `coverage-target-english`, `coverage-target-original` | coverage-target against the same verse in the English BSB or the Greek/Hebrew (build `data/scripture/orig-UHB_UGNT.txt` first with `uv run btmetric-build-original-languages`) instead of the MT source |
+| `coverage-target-och`, `-intersection`, `-direct`, `key-terms-och` | coverage-target and key terms with another symmetrization than silnlp's grow-diag-final-and, for comparison |
 | `coverage-*-detector` | The same as error detectors: 0 while the hypothesis keeps 70% of the reference's coverage, penalized below that |
 | `key-terms`, `key-terms-names` | Share of the reference's key term renderings the hypothesis also uses (all terms, or proper names only) |
 | `perplexity`, `perplexity-one-sided` | Distance between the hypothesis's and the reference's character perplexity under a 5-gram model of the target language (one-sided: only being less predictable counts) |

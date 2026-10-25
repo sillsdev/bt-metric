@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
 
 import numpy as np
+from machine.translation import SymmetrizationHeuristic
 
 from ..terms.inference import AlignedVerses, InferredRendering, RenderingInferrer, specific_renderings
 from ..terms.major_terms import MajorTermList
@@ -61,21 +62,38 @@ class EnglishBible:
 
 class InferredRenderings:
     """Inferred, specificity-filtered renderings by target language and excluded verses, shared by the key term
-    features so each language is aligned once whatever categories a feature keeps."""
+    features so each language's aligner is trained once whatever categories or symmetrization a feature uses."""
 
     def __init__(self, resources: Optional[BibleCorpus] = None, english: EnglishBible = EnglishBible()) -> None:
         self._resources = resources or BibleCorpus()
         self._english = english
         self._terms: Optional[MajorTermList] = None
-        self._inferred: Dict[Tuple[str, FrozenSet[str]], Optional[List[InferredRendering]]] = {}
+        self._verses: Dict[Tuple[str, FrozenSet[str]], Optional[AlignedVerses]] = {}
+        self._inferred: Dict[Tuple[str, FrozenSet[str], SymmetrizationHeuristic], Optional[List[InferredRendering]]] = (
+            {}
+        )
 
-    def get(self, target_language: str, excluded: FrozenSet[str]) -> Optional[List[InferredRendering]]:
-        key = (target_language, excluded)
+    def get(
+        self,
+        target_language: str,
+        excluded: FrozenSet[str],
+        heuristic: SymmetrizationHeuristic = SymmetrizationHeuristic.GROW_DIAG_FINAL_AND,
+    ) -> Optional[List[InferredRendering]]:
+        key = (target_language, excluded, heuristic)
         if key not in self._inferred:
-            self._inferred[key] = self._infer(target_language, excluded)
+            if (target_language, excluded) not in self._verses:
+                self._verses[(target_language, excluded)] = self._load(target_language, excluded)
+            verses = self._verses[(target_language, excluded)]
+            self._inferred[key] = (
+                None
+                if verses is None
+                else specific_renderings(
+                    RenderingInferrer(self._terms).infer(verses.align(heuristic)), verses, self._terms
+                )
+            )
         return self._inferred[key]
 
-    def _infer(self, target_language: str, excluded: FrozenSet[str]) -> Optional[List[InferredRendering]]:
+    def _load(self, target_language: str, excluded: FrozenSet[str]) -> Optional[AlignedVerses]:
         english_path = self._resources.extract_path(self._english.extract)
         target_path = self._resources.extract_path(target_language)
         if english_path is None or target_path is None:
@@ -90,7 +108,7 @@ class InferredRenderings:
         if len(verses) < 1000:
             return None
         LOGGER.info(f"Inferring key term renderings for {target_path.stem} from {len(verses)} verses")
-        return specific_renderings(RenderingInferrer(self._terms).infer(verses.align()), verses, self._terms)
+        return verses
 
 
 class KeyTermAccuracy(Feature):
@@ -103,17 +121,19 @@ class KeyTermAccuracy(Feature):
         resources: Optional[BibleCorpus] = None,
         english: EnglishBible = EnglishBible(),
         renderings: Optional[InferredRenderings] = None,
+        heuristic: SymmetrizationHeuristic = SymmetrizationHeuristic.GROW_DIAG_FINAL_AND,
     ) -> None:
         self.name = "key-terms" if categories is None else f"key-terms-{'-'.join(sorted(categories)).lower()}"
         self._categories = categories
         self._min_confidence = min_confidence
         self._renderings = renderings or InferredRenderings(resources, english)
+        self._heuristic = heuristic
         self._matcher: Optional[Tuple[Tokenizer, RenderingMatcher]] = None
 
     def prepare(
         self, source_language: str, target_language: str, excluded_segments: FrozenSet[str] = frozenset()
     ) -> None:
-        inferred = self._renderings.get(target_language, excluded_segments)
+        inferred = self._renderings.get(target_language, excluded_segments, self._heuristic)
         if inferred is None:
             self._matcher = None
             return

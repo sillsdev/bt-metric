@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 
 from btmetric.evaluation.data import EvaluationSet, JudgedOutputs
+from btmetric.features.base import Feature
 from btmetric.meta_eval.runner import FeatureRegistry
 from btmetric.perturbations.challenge_set import ChallengeSetBuilder, ProjectResources, evaluate
 from btmetric.perturbations.perturbations import (
@@ -287,14 +288,11 @@ def test_rows_a_feature_cannot_score_are_left_out_of_its_accuracy():
         }
     )
 
-    class OnlyFirstRow:
+    class OnlyFirstRow(Feature):
         name = "first-only"
 
         def segment_scores(self, sources, hypotheses, references):
             return np.array([1.0 if hypotheses[0].startswith("Jesus") else 0.0, np.nan])
-
-        def close(self):
-            pass
 
     class Registry:
         def get(self, name):

@@ -22,6 +22,13 @@ class Feature(ABC):
     ) -> np.ndarray:
         """One score per hypothesis."""
 
+    def verse_scores(
+        self, vrefs: Sequence[str], sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]
+    ) -> np.ndarray:
+        """One score per hypothesis, for Scripture whose verse references are known. Features that find other text by
+        verse reference override this."""
+        return self.segment_scores(sources, hypotheses, references)
+
     def system_score(self, sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]) -> float:
         """The score for a whole system output; features with a corpus-level form (e.g. chrF) override this."""
         return float(np.mean(self.segment_scores(sources, hypotheses, references)))

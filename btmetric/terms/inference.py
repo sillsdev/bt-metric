@@ -38,6 +38,7 @@ class AlignedVerses:
         # A verse range (verses one translation combines) is found from any of its verses.
         self._row_by_vref = {verse: i for i, vref in enumerate(vrefs) for verse in expand_vref(vref)}
         self.alignments: List[List[Tuple[int, int]]] = []
+        self._model: Optional[ThotSymmetrizedWordAlignmentModel] = None
 
     @classmethod
     def from_extracts(
@@ -51,9 +52,15 @@ class AlignedVerses:
             [[token.lower() for token in tokenizer.tokenize(target)] for _, _, target in verses],
         )
 
-    def align(self) -> "AlignedVerses":
-        model = self.trained_model()
-        matrices = model.align_batch(list(zip(self.english, self.target)))
+    def align(
+        self, heuristic: SymmetrizationHeuristic = SymmetrizationHeuristic.GROW_DIAG_FINAL_AND
+    ) -> "AlignedVerses":
+        """Aligns the verses with the given symmetrization, training the model on the first call only: the heuristic
+        just combines the two directions' alignments."""
+        if self._model is None:
+            self._model = self.trained_model()
+        self._model.heuristic = heuristic
+        matrices = self._model.align_batch(list(zip(self.english, self.target)))
         self.alignments = [
             sorted((pair.source_index, pair.target_index) for pair in matrix.to_aligned_word_pairs())
             for matrix in matrices

@@ -784,19 +784,36 @@ chrF-B scored directly on every test, against chrF3:
 
 | Test | chrF3 | chrF-B |
 |---|---|---|
-| Field tests: verse preference, independent / all references | 0.594 / 0.542 | **0.641 / 0.613** |
-| Field tests: model comparisons won, independent / all | 3/5, 8/14 | **5/5, 10/14** |
-| Field tests: usability, independent / all | 0.57 / 0.60 | **0.61 / 0.63** |
-| Field tests: "would this draft help", independent / all | 0.51 / 0.44 | **0.56 / 0.47** |
-| Challenge set: mean over error types | 0.868 | **0.942** |
-| Challenge set: weighted by real MT error rates | 0.731 | **0.940** |
-| Challenge set: addition / repetition (loops) | 0.49 / 0.62 | **0.91 / 0.95** |
-| Challenge set: omission / truncation / negation removed | **0.98 / 0.995 / 0.89** | 0.94 / 0.97 / 0.82 |
-| Silver (xCOMET-XL): same verse / system level | 0.623 / 0.743 | **0.640 / 0.769** |
-| Silver (xCOMET-XL-QE): same verse / system level | 0.570 / 0.669 | **0.592 / 0.706** |
+| Field tests: verse preference, independent / all references | 0.594 / 0.542 | **0.617 / 0.596** |
+| Field tests: model comparisons won, independent / all | 3/5, 8/14 | **5/5, 9/14** |
+| Field tests: usability, independent / all | 0.57 / 0.60 | **0.63 / 0.63** |
+| Field tests: "would this draft help", independent / all | 0.50 / 0.44 | **0.55 / 0.48** |
+| Challenge set: mean over error types | 0.868 | **0.940** |
+| Challenge set: weighted by real MT error rates | 0.731 | **0.936** |
+| Challenge set: addition / repetition (loops) | 0.49 / 0.62 | **0.91 / 0.92** |
+| Challenge set: omission / truncation / negation removed | **0.98 / 0.995 / 0.89** | 0.94 / 0.97 / 0.83 |
+| Silver (xCOMET-XL): same verse / system level | 0.623 / 0.743 | **0.641 / 0.768** |
+| Silver (xCOMET-XL-QE): same verse / system level | 0.570 / 0.669 | **0.592 / 0.703** |
 | Human-translation test: published translations' mean share of MT beaten | 0.83 | **0.85** (CEV 0 → 0.18, NET 0.77 → 0.91) |
 
 chrF-B is better than chrF3 on every Bible-domain test overall; it gives up a few points on omissions, truncation and removed negations. It is not for general-domain text (on WMT news, coverage cost 17 points at system level), it rates single verses no better than chrF3, and dynamic translations still lose to most MT systems against a single reference. Still open: the weights rest on 5 independent comparisons and 128 verse pairs, key terms use inferred renderings only (curated Paratext renderings could replace them where a project has them), and normalization across languages (§2.4) is not done.
+
+**Alignment as silnlp does it (October 2026).** The numbers above pair verses and align them as silnlp's chrF-B scorer does, with eflomal's default iteration schedule and grow-diag-final-and symmetrization, silnlp's default. Both implementations give 72.55 on a Team 1 field-test experiment. Thot's default symmetrization (och) was also tried:
+
+- **Usability favours grow-diag-final-and.** Resampling teams (paired bootstrap, 10,000 samples), it is ahead of och by 6.3 points on independent references (in every resample, but only 5 teams) and by 1.8 on all (87%). Only grow-diag-final-and beats chrF3 on usability (in 97–99% of resamples). Verse preference is a tie.
+- **och is slightly better elsewhere:** verse preference 0.641 against 0.617 (within the tie above), comparisons won 10/14 against 9/14, repeated text caught 0.95 against 0.92. Silver and the human-translation test don't change.
+- **The weights still hold.** Refitting them on grow-diag-final-and scores gives 42 × coverage + 15 × key terms, which loses a comparison and catches less added and repeated text; 60 and 20 are best for both heuristics. So the usability gap comes from the alignments, not the weights.
+- **Memory.** Each Bible test set leaves out its own verses and so trains its own aligner; keeping them all ran a 162-test-set silver run out of memory. `AlignerCache` keeps the 4 most recent. Eflomal is deterministic, so retraining an evicted one gives the same alignments.
+
+**Coverage of another Bible instead of the source.** `coverage-target-english` and `coverage-target-original` measure coverage against the English BSB and the Greek/Hebrew (UHB, UGNT) for the same verse, which every project has even when its MT source is unusual. Text was found for about 98.5% of rows. Inside chrF-B (60 × coverage + 20 × key terms), with och alignments for the two pivots:
+
+| Coverage against | Field tests: verse preference, independent | Challenge set: mean / added text | Silver: same verse / system level |
+|---|---|---|---|
+| **the MT source** | **0.633** (och) | **0.943 / 0.907** (och) | **0.641** / 0.768 |
+| English BSB | 0.570 | 0.933 / 0.869 | 0.638 / **0.769** |
+| Greek/Hebrew | 0.594 | 0.924 / 0.799 | 0.633 / 0.761 |
+
+The MT source is best or tied everywhere, so chrF-B keeps it. The silver source column uses grow-diag-final-and; on alignment alone source coverage also leads within verses (0.577 against 0.555 and 0.544), though not at system level (0.662 against 0.688 and 0.683).
 
 ### 4.2 Expert priors and blending
 
@@ -872,16 +889,16 @@ For system comparison, knowing **when a difference is meaningful** is as importa
 
 | System-level difference | chrF3: xCOMET-XL agrees (pairs) | chrF-B: xCOMET-XL agrees (pairs) |
 |---|---|---|
-| 0–0.5 points | 0.61 (362) | 0.57 (251) |
-| 0.5–1 | 0.79 (210) | 0.73 (205) |
-| 1–2 | 0.81 (262) | 0.82 (272) |
-| 2–4 | 0.77 (220) | 0.83 (202) |
-| over 4 | 0.83 (286) | 0.86 (410) |
+| 0–0.5 points | 0.61 (362) | 0.56 (251) |
+| 0.5–1 | 0.79 (210) | 0.73 (211) |
+| 1–2 | 0.81 (262) | 0.83 (268) |
+| 2–4 | 0.77 (220) | 0.81 (197) |
+| over 4 | 0.83 (286) | 0.86 (413) |
 | all pairs | 0.75 | 0.77 |
 
 - **The same shape as on news:** under half a point, agreement is not much better than a coin flip; from half a point to 1 it is in the 70s; from 1 point it reaches the low 80s; it levels off near 85%. The plateau is partly xCOMET-XL's own error, so the true ceiling is unknown, and the logistic curve's "90%" differences (13–17 points) are extrapolations.
-- **chrF-B's differences are slightly more trustworthy from 1 point up** (0.82–0.86 against chrF3's 0.77–0.83), and they run larger: coverage and key terms add spread, so more pairs fall in the over-4 band.
-- **Practical rule for chrF-B:** treat differences under 0.5 points as a tie; 0.5–1 points as weak evidence (about 73%); 1–2 points as probably real (about 80%); over 2 points as about as reliable as the silver labels can tell (83–86%). Report the paired-bootstrap interval alongside.
+- **chrF-B's differences are slightly more trustworthy from 1 point up** (0.81–0.86 against chrF3's 0.77–0.83), and they run larger: coverage and key terms add spread, so more pairs fall in the over-4 band.
+- **Practical rule for chrF-B:** treat differences under 0.5 points as a tie; 0.5–1 points as weak evidence (about 73%); 1–2 points as probably real (about 80%); over 2 points as about as reliable as the silver labels can tell (81–86%; the 2–4 band's dip below 1–2 is noise). Report the paired-bootstrap interval alongside.
 - **Caveats:** silver labels are a metric, not people; many pairs are checkpoints or near-identical configs of one experiment; test sets here are about 300 verses, and a whole held-out book makes smaller differences reliable.
 
 ---

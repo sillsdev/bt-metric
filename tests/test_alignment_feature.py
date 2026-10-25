@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from btmetric.features.alignment import AlignmentCoverage, Tokenizer
+from btmetric.features.alignment import AlignmentCoverage, PivotCoverage, Tokenizer
 from btmetric.features.corpora import BibleCorpus
 
 ENGLISH = ["jesus spoke to them", "then jesus left the house", "moses spoke to the people", "moses left the city"]
@@ -89,3 +89,21 @@ def test_coverage_detectors_ignore_small_shortfalls_and_penalize_large_ones(tmp_
     omissions = ReferenceAnchoredCoverage(resources, detector_tolerance=0.3)
     omissions.prepare("en-TEST", "sw-TEST")
     assert omissions.segment_scores(sources, ["yesu"], references)[0] < 0.0
+
+
+def test_pivot_coverage_finds_each_verse_by_its_reference(tmp_path: Path):
+    corpus = write_bibles(tmp_path)
+    vrefs = corpus.vref_path.read_text(encoding="utf-8").splitlines()
+    coverage = PivotCoverage("en-TEST", "coverage-target-english", corpus=corpus)
+    coverage.prepare("id-TEST", "sw-TEST", frozenset())
+
+    scores = coverage.verse_scores(
+        [vrefs[0], "XYZ 1:1"], ["satu", "satu"], [TARGET[0] + " xx yy zz", TARGET[0]], [TARGET[0], TARGET[0]]
+    )
+
+    assert scores[0] < 0
+    assert np.isnan(scores[1])
+    assert np.isnan(coverage.segment_scores(["satu"], [TARGET[0]], [TARGET[0]])[0])
+    # A range takes the pivot text of both verses.
+    both = f"{TARGET[0]} {TARGET[1]}"
+    assert coverage.verse_scores(["GEN 1:1-2"], ["satu dua"], [both], [both])[0] == 0.0

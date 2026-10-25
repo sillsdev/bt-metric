@@ -177,9 +177,9 @@ def evaluate(
                 part = challenge.loc[rows]
                 if test_hash is not None and test_hash in languages:
                     feature.prepare(*languages[test_hash], frozenset(part["vref"]))
-                sources, references = part["source"].tolist(), part["reference"].tolist()
-                original[rows] = feature.segment_scores(sources, part["original"].tolist(), references)
-                perturbed[rows] = feature.segment_scores(sources, part["perturbed"].tolist(), references)
+                vrefs, sources, references = part["vref"].tolist(), part["source"].tolist(), part["reference"].tolist()
+                original[rows] = feature.verse_scores(vrefs, sources, part["original"].tolist(), references)
+                perturbed[rows] = feature.verse_scores(vrefs, sources, part["perturbed"].tolist(), references)
         finally:
             feature.close()
         if row_scores is not None:

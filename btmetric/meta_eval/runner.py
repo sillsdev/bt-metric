@@ -8,12 +8,13 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
+from machine.translation import SymmetrizationHeuristic
 import pandas as pd
 from scipy.stats import kendalltau
 
 from ..evaluation.data import JudgedOutputs, SegmentJudgments
 from ..evaluation.loaders import AfriMteLoader, WmtDaLoader, WmtMqmLoader
-from ..features.alignment import AlignerCache, AlignmentCoverage, ReferenceAnchoredCoverage
+from ..features.alignment import AlignerCache, AlignmentCoverage, PivotCoverage, ReferenceAnchoredCoverage
 from ..features.back_translation import BackTranslationInfo
 from ..features.base import Feature
 from ..features.chrf import ChrF
@@ -159,6 +160,19 @@ class ResultsFile:
         return table
 
 
+# "direct" keeps only the source-to-target model, which links each target word to at most one source word or to nothing.
+_HEURISTICS = {
+    "och": SymmetrizationHeuristic.OCH,
+    "intersection": SymmetrizationHeuristic.INTERSECTION,
+    "direct": SymmetrizationHeuristic.NONE,
+}
+
+
+def _renamed(feature: Feature, name: str) -> Feature:
+    feature.name = name
+    return feature
+
+
 class FeatureRegistry:
     """Features by name, built on first use: some load models or download tokenizers when constructed."""
 
@@ -204,6 +218,20 @@ class FeatureRegistry:
             "coverage-reference-detector": lambda: ReferenceAnchoredCoverage(
                 aligners=self._aligners, detector_tolerance=0.3
             ),
+            # Symmetrization alternatives for coverage and key terms (the defaults above use grow-diag-final-and).
+            "coverage-target-och": lambda: self._coverage_with("och"),
+            "coverage-target-intersection": lambda: self._coverage_with("intersection"),
+            "coverage-target-direct": lambda: self._coverage_with("direct"),
+            "coverage-target-english": lambda: PivotCoverage(
+                "en-BSB", "coverage-target-english", aligners=self._aligners
+            ),
+            "coverage-target-original": lambda: PivotCoverage(
+                "orig-UHB_UGNT", "coverage-target-original", aligners=self._aligners
+            ),
+            "key-terms-och": lambda: _renamed(
+                KeyTermAccuracy(renderings=self._renderings, heuristic=SymmetrizationHeuristic.OCH),
+                "key-terms-och",
+            ),
             # The recommended metric (PLAN.md 4.1): chrF3, coverage of the hypothesis and key terms, in chrF3 points.
             "chrf-b": lambda: ChrFB(
                 ChrF(0),
@@ -230,11 +258,21 @@ class FeatureRegistry:
             "coverage-source-detector",
             "coverage-target-detector",
             "coverage-reference-detector",
+            "coverage-target-och",
+            "coverage-target-intersection",
+            "coverage-target-direct",
+            "coverage-target-english",
+            "coverage-target-original",
+            "key-terms-och",
             "bt-nllb",
             "bt-nllb-finetuned",
             "bt-scratch",
             "chrf-b",
         }
+
+    def _coverage_with(self, heuristic: str) -> Feature:
+        coverage = AlignmentCoverage("target", aligners=self._aligners, heuristic=_HEURISTICS[heuristic])
+        return _renamed(coverage, f"coverage-target-{heuristic}")
 
     def names(self) -> List[str]:
         return list(self._factories)

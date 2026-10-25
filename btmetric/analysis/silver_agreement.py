@@ -119,8 +119,11 @@ class SilverTable:
                     # Scripture-trained models leave out the verses about to be scored.
                     excluded = frozenset(v for vref in part["vref"] for v in expand_vref(vref))
                     feature.prepare(first["source_extract"], first["target_extract"], excluded)
-                    scores[rows] = feature.segment_scores(
-                        part["source"].tolist(), part["hypothesis"].tolist(), part["reference"].tolist()
+                    scores[rows] = feature.verse_scores(
+                        part["vref"].tolist(),
+                        part["source"].tolist(),
+                        part["hypothesis"].tolist(),
+                        part["reference"].tolist(),
                     )
             finally:
                 feature.close()

@@ -56,7 +56,8 @@ class BibleCorpus(TrainingCorpus):
     """Verse-aligned Scripture extracts. A language is an extract name ("qaa-ABC_2024_04_22") or an ISO code, which
     resolves to the extract btmetric-find-bible-corpora selected for it. Excluded segments are verse references."""
 
-    scripture_dirs: Tuple[Path, ...] = (Path("M:/MT/scripture"), Path("M:/eBible/MT/scripture"))
+    # data/scripture holds extracts built here, such as the original-language Bible.
+    scripture_dirs: Tuple[Path, ...] = (Path("M:/MT/scripture"), Path("M:/eBible/MT/scripture"), Path("data/scripture"))
     corpora_table: Path = Path("data/bible_corpora.tsv")
     vref_path: Path = Path("../silnlp/silnlp/assets/vref.txt")
 

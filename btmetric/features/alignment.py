@@ -8,14 +8,17 @@ aligner and how differently the two languages express things.
 """
 
 import logging
+from collections import OrderedDict
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 import numpy as np
 from machine.tokenization import LatinWordTokenizer
+from machine.translation import SymmetrizationHeuristic
 from machine.translation.thot import ThotSymmetrizedWordAlignmentModel
 
 from ..terms.inference import AlignedVerses
 from .base import Feature
+from ..scripture.verses import expand_vref
 from .corpora import BibleCorpus, ParallelText, TrainingCorpus
 
 LOGGER = logging.getLogger(__name__)
@@ -41,13 +44,16 @@ class Tokenizer:
 
 
 class WordAligner:
-    """A symmetrized eflomal model trained on parallel text, for aligning new sentence pairs."""
+    """A symmetrized eflomal model trained on parallel text, for aligning new sentence pairs.
+
+    The symmetrization heuristic only combines the two directions' alignments, so one trained model serves them all.
+    """
 
     def __init__(self, model: ThotSymmetrizedWordAlignmentModel, source: Tokenizer, target: Tokenizer) -> None:
         self._model = model
         self._source = source
         self._target = target
-        self._memo: Dict[Tuple[str, str], Tuple[List[Tuple[int, int, float]], int, int]] = {}
+        self._memo: Dict[Tuple[SymmetrizationHeuristic, str, str], Tuple[List[Tuple[int, int, float]], int, int]] = {}
 
     @classmethod
     def train(cls, text: ParallelText, min_pairs: int = 500) -> Optional["WordAligner"]:
@@ -64,7 +70,11 @@ class WordAligner:
         return cls(verses.trained_model(), source_tokenizer, target_tokenizer)
 
     def coverage(
-        self, sources: Sequence[str], targets: Sequence[str], weighted: bool = True
+        self,
+        sources: Sequence[str],
+        targets: Sequence[str],
+        weighted: bool = True,
+        heuristic: SymmetrizationHeuristic = SymmetrizationHeuristic.GROW_DIAG_FINAL_AND,
     ) -> Tuple[np.ndarray, np.ndarray]:
         """Per pair: how well source tokens are covered by target tokens, and target tokens by source tokens.
 
@@ -73,19 +83,26 @@ class WordAligner:
         little. Unweighted, a token counts fully if it is aligned at all.
         """
         source_coverage, target_coverage = [], []
-        for source_best, target_best, source_length, target_length in self._best_scores(sources, targets, weighted):
+        for source_best, target_best, source_length, target_length in self._best_scores(
+            sources, targets, weighted, heuristic
+        ):
             source_coverage.append(sum(source_best.values()) / source_length if source_length else 0.0)
             target_coverage.append(sum(target_best.values()) / target_length if target_length else 0.0)
         return np.array(source_coverage), np.array(target_coverage)
 
     def source_profiles(self, sources: Sequence[str], targets: Sequence[str]) -> List[Dict[int, float]]:
         """Per pair: each aligned source token's best translation probability."""
-        return [source_best for source_best, _, _, _ in self._best_scores(sources, targets, weighted=True)]
+        return [
+            source_best
+            for source_best, _, _, _ in self._best_scores(
+                sources, targets, True, SymmetrizationHeuristic.GROW_DIAG_FINAL_AND
+            )
+        ]
 
     def _best_scores(
-        self, sources: Sequence[str], targets: Sequence[str], weighted: bool
+        self, sources: Sequence[str], targets: Sequence[str], weighted: bool, heuristic: SymmetrizationHeuristic
     ) -> List[Tuple[Dict[int, float], Dict[int, float], int, int]]:
-        alignments = self._aligned(sources, targets)
+        alignments = self._aligned(sources, targets, heuristic)
         results = []
         for word_pairs, source_length, target_length in alignments:
             source_best: Dict[int, float] = {}
@@ -98,13 +115,15 @@ class WordAligner:
         return results
 
     def _aligned(
-        self, sources: Sequence[str], targets: Sequence[str]
+        self, sources: Sequence[str], targets: Sequence[str], heuristic: SymmetrizationHeuristic
     ) -> List[Tuple[List[Tuple[int, int, float]], int, int]]:
         """Aligned word pairs with translation scores, memoized: the same source-reference pair is aligned for every
         system scored against it and for every coverage feature."""
-        missing = list(dict.fromkeys(pair for pair in zip(sources, targets) if pair not in self._memo))
+        keys = [(heuristic, s, t) for s, t in zip(sources, targets)]
+        missing = list(dict.fromkeys(key for key in keys if key not in self._memo))
         if missing:
-            tokenized = [(self._source.tokenize(s), self._target.tokenize(t)) for s, t in missing]
+            self._model.heuristic = heuristic
+            tokenized = [(self._source.tokenize(s), self._target.tokenize(t)) for _, s, t in missing]
             for pair, (source_tokens, target_tokens), word_pairs in zip(
                 missing, tokenized, self._model.get_best_aligned_word_pairs_batch(tokenized)
             ):
@@ -114,7 +133,7 @@ class WordAligner:
                     if p.source_index >= 0 and p.target_index >= 0
                 ]
                 self._memo[pair] = (kept, len(source_tokens), len(target_tokens))
-        return [self._memo[pair] for pair in zip(sources, targets)]
+        return [self._memo[key] for key in keys]
 
 
 class AlignerCache:
@@ -122,22 +141,28 @@ class AlignerCache:
 
     Keyed by the corpus's description of its text, so two calls that would train on the same text (e.g. a news
     sample whatever segments are excluded) share one aligner.
+
+    Only the most recent aligners are kept: each Bible test set excludes its own verses, so it trains its own aligner,
+    and keeping them all ran a 162-test-set silver run out of memory. Eflomal is deterministic, so retraining an
+    evicted one gives the same alignments.
     """
 
-    def __init__(self, corpus: Optional[TrainingCorpus] = None) -> None:
+    def __init__(self, corpus: Optional[TrainingCorpus] = None, capacity: int = 4) -> None:
         self._corpus = corpus or BibleCorpus()
-        self._aligners: Dict[str, Optional[WordAligner]] = {}
-        self._keys: Dict[Tuple[str, str, FrozenSet[str]], Optional[str]] = {}
+        self._capacity = capacity
+        self._aligners: "OrderedDict[str, Optional[WordAligner]]" = OrderedDict()
 
     def get(self, source_language: str, target_language: str, excluded: FrozenSet[str]) -> Optional[WordAligner]:
-        request = (source_language, target_language, excluded)
-        if request not in self._keys:
-            text = self._corpus.parallel(source_language, target_language, excluded)
-            self._keys[request] = text.key if text else None
-            if text and text.key not in self._aligners:
-                self._aligners[text.key] = WordAligner.train(text)
-        key = self._keys[request]
-        return self._aligners[key] if key else None
+        text = self._corpus.parallel(source_language, target_language, excluded)
+        if text is None:
+            return None
+        if text.key in self._aligners:
+            self._aligners.move_to_end(text.key)
+        else:
+            self._aligners[text.key] = WordAligner.train(text)
+            while len(self._aligners) > self._capacity:
+                self._aligners.popitem(last=False)
+        return self._aligners[text.key]
 
 
 def deficit_penalty(ratio: np.ndarray, tolerance: float) -> np.ndarray:
@@ -166,12 +191,14 @@ class AlignmentCoverage(Feature):
         corpus: Optional[TrainingCorpus] = None,
         aligners: Optional[AlignerCache] = None,
         detector_tolerance: Optional[float] = None,
+        heuristic: SymmetrizationHeuristic = SymmetrizationHeuristic.GROW_DIAG_FINAL_AND,
     ) -> None:
         if side not in ("source", "target"):
             raise ValueError(f"Unknown coverage side {side!r}.")
         self.name = f"coverage-{side}" + ("-detector" if detector_tolerance is not None else "")
         self._side = side
         self._detector_tolerance = detector_tolerance
+        self._heuristic = heuristic
         self._aligners = aligners or AlignerCache(corpus)
         self._aligner: Optional[WordAligner] = None
 
@@ -186,13 +213,78 @@ class AlignmentCoverage(Feature):
         if self._aligner is None:
             return np.full(len(hypotheses), np.nan)
         side = 0 if self._side == "source" else 1
-        hypothesis_coverage = self._aligner.coverage(sources, hypotheses)[side]
-        reference_coverage = self._aligner.coverage(sources, references)[side]
+        hypothesis_coverage = self._aligner.coverage(sources, hypotheses, heuristic=self._heuristic)[side]
+        reference_coverage = self._aligner.coverage(sources, references, heuristic=self._heuristic)[side]
         if self._detector_tolerance is None:
             return hypothesis_coverage - reference_coverage
         with np.errstate(divide="ignore", invalid="ignore"):
             ratio = np.where(reference_coverage > 0, hypothesis_coverage / reference_coverage, np.nan)
         return deficit_penalty(ratio, self._detector_tolerance)
+
+
+class PivotCoverage(Feature):
+    """Hypothesis coverage against another Bible's text of each verse (English, or the original languages) instead of
+    its source, minus the reference's, so one pivot-target aligner serves every source language.
+
+    The pivot text is found by verse reference, so only verse_scores scores; segment_scores, without references,
+    gives NaN.
+    """
+
+    criterion = "accuracy"
+
+    def __init__(
+        self,
+        pivot: str,
+        name: str,
+        corpus: Optional[BibleCorpus] = None,
+        aligners: Optional[AlignerCache] = None,
+    ) -> None:
+        self.name = name
+        self._pivot = pivot
+        self._corpus = corpus or BibleCorpus()
+        self._aligners = aligners or AlignerCache(self._corpus)
+        self._aligner: Optional[WordAligner] = None
+        self._pivot_by_verse: Dict[str, str] = {}
+
+    def prepare(
+        self, source_language: str, target_language: str, excluded_segments: FrozenSet[str] = frozenset()
+    ) -> None:
+        self._aligner = self._aligners.get(self._pivot, target_language, excluded_segments)
+        if self._pivot_by_verse:
+            return
+        pivot_path = self._corpus.extract_path(self._pivot)
+        if pivot_path is None:
+            return
+        vrefs = self._corpus.vref_path.read_text(encoding="utf-8").splitlines()
+        lines = pivot_path.read_text(encoding="utf-8-sig").splitlines()
+        self._pivot_by_verse = {
+            vref: line.strip() for vref, line in zip(vrefs, lines) if line.strip() not in ("", "<range>", "...")
+        }
+
+    def segment_scores(
+        self, sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]
+    ) -> np.ndarray:
+        return np.full(len(hypotheses), np.nan)
+
+    def verse_scores(
+        self, vrefs: Sequence[str], sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]
+    ) -> np.ndarray:
+        scores = np.full(len(hypotheses), np.nan)
+        if self._aligner is None:
+            return scores
+        # A verse range takes the pivot text of each of its verses.
+        pivot = [
+            " ".join(self._pivot_by_verse[v] for v in expand_vref(vref) if v in self._pivot_by_verse) for vref in vrefs
+        ]
+        found = [i for i, verse in enumerate(pivot) if verse]
+        if len(found) < len(vrefs):
+            LOGGER.info(f"{self.name}: pivot text found for {len(found)} of {len(vrefs)} verses")
+        if found:
+            verses = [pivot[i] for i in found]
+            hypothesis_coverage = self._aligner.coverage(verses, [hypotheses[i] for i in found])[1]
+            reference_coverage = self._aligner.coverage(verses, [references[i] for i in found])[1]
+            scores[found] = hypothesis_coverage - reference_coverage
+        return scores
 
 
 class ReferenceAnchoredCoverage(Feature):
