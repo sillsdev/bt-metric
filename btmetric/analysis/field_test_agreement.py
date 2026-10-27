@@ -133,7 +133,8 @@ def _analysed_verses(rows: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFram
 def flag_report(rows: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
     """Whether a feature's warning picks out the verses teams found a problem in: for each flag and problem, how
     often the problem was marked on flagged and on other verses, the share of marked verses flagged, and a one-sided
-    Fisher test. Flags are a detector firing, a key-term mismatch, or a verse in a team's lowest quarter."""
+    Fisher test. Flags are a detector firing, a key-term or negation mismatch, more unseen words than the
+    reference, or a verse in a team's lowest quarter."""
     from scipy.stats import fisher_exact
 
     verses = _analysed_verses(rows, judgments)
@@ -145,6 +146,12 @@ def flag_report(rows: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
     for feature in ["key-terms", "key-terms-pn"]:
         if feature in verses:
             flags[f"{feature} mismatch"] = (verses[feature] < 1, verses[feature].notna())
+    for feature in ["negation", "negation-missing"]:
+        if feature in verses:
+            flags[f"{feature} mismatch"] = (verses[feature] < 0, verses[feature].notna())
+    for feature in ["unseen-words", "unseen-words-implausible"]:
+        if feature in verses:
+            flags[f"{feature} fires"] = (verses[feature] < 0, verses[feature].notna())
     for feature in ["chrF3", "perplexity", "coverage-target", "coverage-reference"]:
         if feature in verses:
             flags[f"{feature} lowest quarter"] = (lowest_quarter(feature), verses[feature].notna())

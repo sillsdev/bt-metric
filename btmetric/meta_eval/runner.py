@@ -23,6 +23,8 @@ from ..features.comet import Comet
 from ..features.corpora import BibleCorpus, TrainingCorpus
 from ..features.key_terms import InferredRenderings, KeyTermAccuracy
 from ..features.lexical import Bleu, MeanChrF, NegativeTer
+from ..features.negation import NegationConsistency
+from ..features.unseen_words import UnseenWords, VocabularyCache
 from ..features.naturalness import CharNgramModel, PerplexityRatio
 from ..features.reverse_models import FineTunedNllb, ScratchReverseModel
 from .agreement import PairwiseAgreement
@@ -182,6 +184,8 @@ class FeatureRegistry:
         corpus = corpus or BibleCorpus()
         # Shared so that related features train each language's models once between them.
         self._aligners = AlignerCache(corpus)
+        self._subword_aligners = AlignerCache(corpus, subword_vocab=8000)
+        self._vocabularies = VocabularyCache(corpus)
         self._renderings = InferredRenderings()
         self._language_models: Dict[str, CharNgramModel] = {}
         self._factories: Dict[str, Callable[[], Feature]] = {
@@ -222,6 +226,10 @@ class FeatureRegistry:
             "coverage-target-och": lambda: self._coverage_with("och"),
             "coverage-target-intersection": lambda: self._coverage_with("intersection"),
             "coverage-target-direct": lambda: self._coverage_with("direct"),
+            # SentencePiece pieces instead of words: 8,000-piece unigram models trained on each aligner's text.
+            "coverage-target-subword": lambda: _renamed(
+                AlignmentCoverage("target", aligners=self._subword_aligners), "coverage-target-subword"
+            ),
             "coverage-target-english": lambda: PivotCoverage(
                 "en-BSB", "coverage-target-english", aligners=self._aligners
             ),
@@ -232,6 +240,10 @@ class FeatureRegistry:
                 KeyTermAccuracy(renderings=self._renderings, heuristic=SymmetrizationHeuristic.OCH),
                 "key-terms-och",
             ),
+            "negation": lambda: NegationConsistency(renderings=self._renderings),
+            "negation-missing": lambda: NegationConsistency(renderings=self._renderings, missing_only=True),
+            "unseen-words": lambda: UnseenWords(vocabularies=self._vocabularies),
+            "unseen-words-implausible": lambda: UnseenWords(implausible_only=True, vocabularies=self._vocabularies),
             # The recommended metric (PLAN.md 4.1): chrF3, coverage of the hypothesis and key terms, in chrF3 points.
             "chrf-b": lambda: ChrFB(
                 ChrF(0),
@@ -261,9 +273,14 @@ class FeatureRegistry:
             "coverage-target-och",
             "coverage-target-intersection",
             "coverage-target-direct",
+            "coverage-target-subword",
             "coverage-target-english",
             "coverage-target-original",
             "key-terms-och",
+            "negation",
+            "negation-missing",
+            "unseen-words",
+            "unseen-words-implausible",
             "bt-nllb",
             "bt-nllb-finetuned",
             "bt-scratch",

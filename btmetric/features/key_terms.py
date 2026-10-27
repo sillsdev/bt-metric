@@ -5,6 +5,7 @@ projects have no curated renderings. Segments whose reference contains no key te
 """
 
 import logging
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, FrozenSet, List, Optional, Sequence, Set, Tuple
@@ -14,6 +15,7 @@ from machine.translation import SymmetrizationHeuristic
 
 from ..terms.inference import AlignedVerses, InferredRendering, RenderingInferrer, specific_renderings
 from ..terms.major_terms import MajorTermList
+from ..terms.negation import NegationMarkers
 from .alignment import Tokenizer
 from .base import Feature
 from .corpora import BibleCorpus
@@ -61,17 +63,26 @@ class EnglishBible:
 
 
 class InferredRenderings:
-    """Inferred, specificity-filtered renderings by target language and excluded verses, shared by the key term
-    features so each language's aligner is trained once whatever categories or symmetrization a feature uses."""
+    """Inferred, specificity-filtered renderings (and negation words) by target language and excluded verses, shared
+    by the key term and negation features so each language's aligner is trained once whatever categories or
+    symmetrization a feature uses.
 
-    def __init__(self, resources: Optional[BibleCorpus] = None, english: EnglishBible = EnglishBible()) -> None:
+    Only the most recent aligned texts are kept: each Bible test set excludes its own verses and so aligns its own, and
+    keeping them all ran a silver run out of memory. What was inferred from them is small and kept.
+    """
+
+    def __init__(
+        self, resources: Optional[BibleCorpus] = None, english: EnglishBible = EnglishBible(), capacity: int = 2
+    ) -> None:
         self._resources = resources or BibleCorpus()
         self._english = english
+        self._capacity = capacity
         self._terms: Optional[MajorTermList] = None
-        self._verses: Dict[Tuple[str, FrozenSet[str]], Optional[AlignedVerses]] = {}
+        self._verses: "OrderedDict[Tuple[str, FrozenSet[str]], Optional[AlignedVerses]]" = OrderedDict()
         self._inferred: Dict[Tuple[str, FrozenSet[str], SymmetrizationHeuristic], Optional[List[InferredRendering]]] = (
             {}
         )
+        self._negation: Dict[Tuple[str, FrozenSet[str], SymmetrizationHeuristic], Optional[List[str]]] = {}
 
     def get(
         self,
@@ -81,9 +92,7 @@ class InferredRenderings:
     ) -> Optional[List[InferredRendering]]:
         key = (target_language, excluded, heuristic)
         if key not in self._inferred:
-            if (target_language, excluded) not in self._verses:
-                self._verses[(target_language, excluded)] = self._load(target_language, excluded)
-            verses = self._verses[(target_language, excluded)]
+            verses = self._aligned_verses(target_language, excluded)
             self._inferred[key] = (
                 None
                 if verses is None
@@ -92,6 +101,30 @@ class InferredRenderings:
                 )
             )
         return self._inferred[key]
+
+    def negation_markers(
+        self,
+        target_language: str,
+        excluded: FrozenSet[str],
+        heuristic: SymmetrizationHeuristic = SymmetrizationHeuristic.GROW_DIAG_FINAL_AND,
+    ) -> Optional[List[str]]:
+        key = (target_language, excluded, heuristic)
+        if key not in self._negation:
+            verses = self._aligned_verses(target_language, excluded)
+            self._negation[key] = None if verses is None else NegationMarkers().infer(verses.align(heuristic))
+            if verses is not None:
+                LOGGER.info(f"Negation words for {target_language}: {self._negation[key]}")
+        return self._negation[key]
+
+    def _aligned_verses(self, target_language: str, excluded: FrozenSet[str]) -> Optional[AlignedVerses]:
+        key = (target_language, excluded)
+        if key in self._verses:
+            self._verses.move_to_end(key)
+        else:
+            self._verses[key] = self._load(target_language, excluded)
+            while len(self._verses) > self._capacity:
+                self._verses.popitem(last=False)
+        return self._verses[key]
 
     def _load(self, target_language: str, excluded: FrozenSet[str]) -> Optional[AlignedVerses]:
         english_path = self._resources.extract_path(self._english.extract)

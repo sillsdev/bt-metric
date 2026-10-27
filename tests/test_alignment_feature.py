@@ -2,7 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
-from btmetric.features.alignment import AlignmentCoverage, PivotCoverage, Tokenizer
+from btmetric.features.alignment import AlignerCache, AlignmentCoverage, PivotCoverage, SubwordTokenizer, Tokenizer
 from btmetric.features.corpora import BibleCorpus
 
 ENGLISH = ["jesus spoke to them", "then jesus left the house", "moses spoke to the people", "moses left the city"]
@@ -107,3 +107,19 @@ def test_pivot_coverage_finds_each_verse_by_its_reference(tmp_path: Path):
     # A range takes the pivot text of both verses.
     both = f"{TARGET[0]} {TARGET[1]}"
     assert coverage.verse_scores(["GEN 1:1-2"], ["satu dua"], [both], [both])[0] == 0.0
+
+
+def test_subword_tokenizer_splits_unseen_forms_into_known_pieces():
+    tokenizer = SubwordTokenizer.train(TARGET * 50, vocab_size=30)
+    # An inflected form the model never saw shares its stem's piece.
+    tokens = tokenizer.tokenize("Yesuni")
+    assert tokens[0] == "▁yesu" and len(tokens) > 1 and "▁" not in tokens
+
+
+def test_subword_coverage_penalizes_additions(tmp_path: Path):
+    resources = write_bibles(tmp_path)
+    feature = AlignmentCoverage("target", aligners=AlignerCache(resources, subword_vocab=40))
+    feature.prepare("en-TEST", "sw-TEST")
+    sources, references = ["jesus spoke to them"], ["yesu aliongea nao"]
+    assert feature.segment_scores(sources, ["yesu aliongea nao xyzzy plugh qwerty"], references)[0] < -0.2
+    assert feature.segment_scores(sources, references, references)[0] == 0.0

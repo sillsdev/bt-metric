@@ -828,6 +828,24 @@ The MT source is best or tied everywhere, so chrF-B keeps it. The silver source 
 - **spBLEU and BLEU make chrF-B worse.** They lose two of the five independent comparisons, lower usability by 2–4 points and catch fewer omissions and removed negations, in exchange for added and repeated text that coverage already catches. Without coverage, too, chrF3 + spBLEU wins fewer comparisons than chrF3 (2/5 against 3/5). Fit on the independent comparisons, they get some weight but the held-out-team accuracy doesn't change (0.555 either way).
 - **chrF3++ ties chrF3.** Every difference is within noise (±0.09 on 128 verse pairs, about ±0.025 on silver). chrF-B keeps chrF3, the score silnlp already reports and users know how to read.
 
+**What key terms add.** Without them (chrF3 + 60 × coverage), usability falls from 0.634 to 0.573 and "would this draft help" from 0.549 to 0.485, back to chrF3's level, and on the human-translation test the published translations' share of MT beaten falls from 0.85 to 0.83 (dynamic translations 0.48 to 0.42, CEV 0.18 to 0, NET 0.91 to 0.77). Elsewhere they are neutral or slightly negative. Key terms are where chrF-B's usability edge over chrF3 comes from.
+
+**New features tried in chrF-B (October 2026).** Each added to chrF-B (or, for subword alignment, replacing its coverage), at the weight shown:
+
+| Variant | Field tests: verse preference, independent / all | Comparisons won, independent / all | Usability / would help, independent | Silver: same verse / system level | Challenge set: negation / mean |
+|---|---|---|---|---|---|
+| **chrF-B** | 0.617 / 0.596 | **5/5, 9/14** | 0.634 / 0.549 | **0.641 / 0.768** | 0.834 / 0.940 |
+| + 5 × negation-missing | 0.633 / 0.600 | **5/5, 9/14** | 0.634 / 0.549 | **0.641 / 0.768** | **0.894 / 0.947** |
+| + 5 × negation (any mismatch) | 0.625 / 0.598 | **5/5, 9/14** | 0.634 / 0.549 | 0.641 / 0.769 | 0.772 / 0.933 |
+| coverage from subword alignment | 0.602 / 0.598 | 3/5, 7/14 | 0.633 / 0.553 | 0.633 / 0.754 | 0.853 / 0.939 |
+| + 5 × unseen-words | 0.633 / 0.610 | **5/5, 9/14** | 0.633 / 0.549 | **0.641 / 0.768** | 0.836 / 0.941 |
+| + 20 × unseen-words | **0.648** / 0.610 | **5/5, 9/14** | 0.635 / 0.549 | 0.640 / 0.765 | 0.836 / 0.940 |
+| + 40 × unseen-words-implausible | **0.656** / 0.603 | **5/5, 9/14** | **0.642 / 0.563** | 0.635 / 0.757 | 0.836 / 0.939 |
+
+- **Negation** (`negation`, `negation-missing`; `btmetric/features/negation.py`). The hypothesis's count of the target's negation words against the reference's; the words are those aligned with English "not", "no", "never" and the like (`btmetric/terms/negation.py`). Penalizing any mismatch hurts the challenge set (negation removed 0.83 to 0.77): in 21% of its negation rows the MT original already has more negations than the reference, so deleting one is rewarded. Penalizing only fewer negations (`negation-missing`) catches removed negations at 0.89 at weight 5 (0.90 at 20) with no loss on any other error type, and is neutral on silver and the field tests. It fires rarely (3.9% of scored silver rows; the two drafts in a field comparison differ on 0.6% of verses) and only where negation words are found: 85% of silver rows, 42% of field-test rows. Languages that negate with affixes get none, and the word lists are noisy (German lacks *nicht*, which ranks below rarer, cleaner words under the 5-word cap). The best candidate for chrF-B; not yet added.
+- **Subword alignment** (`coverage-target-subword`). The aligner trained on SentencePiece pieces (unigram, 8,000, trained on the aligner's own target text) instead of words, so unseen inflections of known stems still align. Slightly worse: it loses two independent comparisons and 1.4 points of silver system-level agreement. Per silver test set it is better on 48 and worse on 59, by similar amounts, with no group of languages where it clearly helps. chrF-B keeps word alignment.
+- **Made-up words** (`unseen-words`, `unseen-words-implausible`; `btmetric/features/unseen_words.py`). The share of the hypothesis's words never seen in the target Bible (its test verses left out), minus the reference's. The implausible variant counts an unseen word only if the Bible's SentencePiece model breaks it into pieces averaging under 2.5 characters, as invented strings break. Verse preference rises 2–4 points (about 2–5 of 128 verse pairs) while silver falls as the weight rises, and agreement with the verse analyses' "not a word" marks is no better than chrF3's (0.41 against 0.42). Not added. As a flag it picks out spelling errors: 80% of the verses it flags were marked for spelling against 37% of the rest (20 verses, p < 0.001); the implausible variant is no better (82% against 40%, 11 verses, p = 0.008).
+
 ### 4.2 Expert priors and blending
 
 Compare three sources of weights:

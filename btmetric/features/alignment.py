@@ -7,9 +7,10 @@ text. Aligners are symmetrized Thot eflomal models trained on a small amount of 
 aligner and how differently the two languages express things.
 """
 
+import io
 import logging
 from collections import OrderedDict
-from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Dict, FrozenSet, List, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from machine.tokenization import LatinWordTokenizer
@@ -21,6 +22,9 @@ from .base import Feature
 from ..scripture.verses import expand_vref
 from .corpora import BibleCorpus, ParallelText, TrainingCorpus
 
+if TYPE_CHECKING:
+    import sentencepiece as spm
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -30,6 +34,10 @@ class Tokenizer:
     def __init__(self, by_character: bool) -> None:
         self._by_character = by_character
         self._words = LatinWordTokenizer()
+
+    @property
+    def by_character(self) -> bool:
+        return self._by_character
 
     @classmethod
     def for_corpus(cls, verses: Sequence[str]) -> "Tokenizer":
@@ -43,21 +51,62 @@ class Tokenizer:
         return [token.lower() for token in self._words.tokenize(text)]
 
 
+class SubwordTokenizer:
+    """SentencePiece pieces of lowercased text, from a unigram model trained on the aligner's own training text, so
+    inflected forms the aligner never saw share pieces with forms it did."""
+
+    def __init__(self, processor: "spm.SentencePieceProcessor") -> None:
+        self._processor = processor
+
+    @classmethod
+    def train(cls, lines: Sequence[str], vocab_size: int) -> "SubwordTokenizer":
+        import sentencepiece as spm
+
+        model = io.BytesIO()
+        spm.SentencePieceTrainer.train(
+            sentence_iterator=iter([line.lower() for line in lines if line.strip()]),
+            model_writer=model,
+            vocab_size=vocab_size,
+            model_type="unigram",
+            character_coverage=1.0,
+            # A small Bible may not support the full vocabulary.
+            hard_vocab_limit=False,
+            minloglevel=2,
+        )
+        return cls(spm.SentencePieceProcessor(model_proto=model.getvalue()))
+
+    def tokenize(self, text: str) -> List[str]:
+        # A lone word-boundary marker carries no content to align; counting it would dilute coverage.
+        return [piece for piece in self._processor.encode(text.lower(), out_type=str) if piece != "▁"]
+
+
 class WordAligner:
     """A symmetrized eflomal model trained on parallel text, for aligning new sentence pairs.
 
     The symmetrization heuristic only combines the two directions' alignments, so one trained model serves them all.
     """
 
-    def __init__(self, model: ThotSymmetrizedWordAlignmentModel, source: Tokenizer, target: Tokenizer) -> None:
+    def __init__(
+        self,
+        model: ThotSymmetrizedWordAlignmentModel,
+        source: Union[Tokenizer, SubwordTokenizer],
+        target: Union[Tokenizer, SubwordTokenizer],
+    ) -> None:
         self._model = model
         self._source = source
         self._target = target
         self._memo: Dict[Tuple[SymmetrizationHeuristic, str, str], Tuple[List[Tuple[int, int, float]], int, int]] = {}
 
     @classmethod
-    def train(cls, text: ParallelText, min_pairs: int = 500) -> Optional["WordAligner"]:
-        source_tokenizer, target_tokenizer = Tokenizer.for_corpus(text.source), Tokenizer.for_corpus(text.target)
+    def train(
+        cls, text: ParallelText, min_pairs: int = 500, subword_vocab: Optional[int] = None
+    ) -> Optional["WordAligner"]:
+        """subword_vocab: align SentencePiece pieces of this vocabulary size, trained on each side, instead of words."""
+        if subword_vocab:
+            source_tokenizer: Union[Tokenizer, SubwordTokenizer] = SubwordTokenizer.train(text.source, subword_vocab)
+            target_tokenizer: Union[Tokenizer, SubwordTokenizer] = SubwordTokenizer.train(text.target, subword_vocab)
+        else:
+            source_tokenizer, target_tokenizer = Tokenizer.for_corpus(text.source), Tokenizer.for_corpus(text.target)
         verses = AlignedVerses([], [], [])
         for i, (source, target) in enumerate(zip(text.source, text.target)):
             verses.vrefs.append(str(i))
@@ -147,9 +196,12 @@ class AlignerCache:
     evicted one gives the same alignments.
     """
 
-    def __init__(self, corpus: Optional[TrainingCorpus] = None, capacity: int = 4) -> None:
+    def __init__(
+        self, corpus: Optional[TrainingCorpus] = None, capacity: int = 4, subword_vocab: Optional[int] = None
+    ) -> None:
         self._corpus = corpus or BibleCorpus()
         self._capacity = capacity
+        self._subword_vocab = subword_vocab
         self._aligners: "OrderedDict[str, Optional[WordAligner]]" = OrderedDict()
 
     def get(self, source_language: str, target_language: str, excluded: FrozenSet[str]) -> Optional[WordAligner]:
@@ -159,7 +211,7 @@ class AlignerCache:
         if text.key in self._aligners:
             self._aligners.move_to_end(text.key)
         else:
-            self._aligners[text.key] = WordAligner.train(text)
+            self._aligners[text.key] = WordAligner.train(text, subword_vocab=self._subword_vocab)
             while len(self._aligners) > self._capacity:
                 self._aligners.popitem(last=False)
         return self._aligners[text.key]
