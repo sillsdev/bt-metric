@@ -815,6 +815,19 @@ chrF-B is better than chrF3 on every Bible-domain test overall; it gives up a fe
 
 The MT source is best or tied everywhere, so chrF-B keeps it. The silver source column uses grow-diag-final-and; on alignment alone source coverage also leads within verses (0.577 against 0.555 and 0.544), though not at system level (0.662 against 0.688 and 0.683).
 
+**Other lexical metrics in chrF-B.** chrF-B with chrF3++ in place of chrF3, or with chrF3 averaged with spBLEU or BLEU (lexical part (chrF3 + c × other) / (1 + c), so coverage and key terms keep their weight):
+
+| Lexical part | Field tests: verse preference, independent / all | Comparisons won, independent / all | Usability, independent | Silver: same verse / system level | Challenge set: addition / repetition / omission / negation | Challenge set mean |
+|---|---|---|---|---|---|---|
+| **chrF3 (chrF-B)** | 0.617 / 0.596 | **5/5, 9/14** | 0.634 | 0.641 / 0.768 | 0.91 / 0.92 / **0.94 / 0.83** | 0.940 |
+| chrF3++ | **0.633** / 0.591 | **5/5, 9/14** | **0.635** | 0.641 / **0.772** | 0.92 / 0.93 / 0.94 / 0.83 | **0.942** |
+| chrF3 + 0.5 × spBLEU | 0.625 / 0.600 | 3/5, 7/14 | 0.613 | 0.641 / 0.766 | 0.95 / 0.95 / 0.92 / 0.80 | 0.941 |
+| chrF3 + spBLEU | 0.625 / **0.610** | 3/5, 7/14 | 0.595 | 0.640 / 0.766 | **0.96 / 0.96** / 0.91 / 0.79 | 0.939 |
+| chrF3 + BLEU | 0.594 / 0.581 | 3/5, 7/14 | 0.597 | 0.639 / 0.769 | 0.96 / 0.96 / 0.90 / 0.79 | 0.936 |
+
+- **spBLEU and BLEU make chrF-B worse.** They lose two of the five independent comparisons, lower usability by 2–4 points and catch fewer omissions and removed negations, in exchange for added and repeated text that coverage already catches. Without coverage, too, chrF3 + spBLEU wins fewer comparisons than chrF3 (2/5 against 3/5). Fit on the independent comparisons, they get some weight but the held-out-team accuracy doesn't change (0.555 either way).
+- **chrF3++ ties chrF3.** Every difference is within noise (±0.09 on 128 verse pairs, about ±0.025 on silver). chrF-B keeps chrF3, the score silnlp already reports and users know how to read.
+
 ### 4.2 Expert priors and blending
 
 Compare three sources of weights:
