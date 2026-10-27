@@ -845,7 +845,17 @@ The MT source is best or tied everywhere, so chrF-B keeps it. The silver source 
 | chrF3 + BLEU | 0.594 / 0.581 | 3/5, 7/14 | 0.597 | 0.639 / 0.769 | 0.96 / 0.96 / 0.90 / 0.79 | 0.936 |
 
 - **spBLEU and BLEU make chrF-B worse.** They lose two of the five independent comparisons, lower usability by 2–4 points and catch fewer omissions and removed negations, in exchange for added and repeated text that coverage already catches. Without coverage, too, chrF3 + spBLEU wins fewer comparisons than chrF3 (2/5 against 3/5). Fit on the independent comparisons, they get some weight but the held-out-team accuracy doesn't change (0.555 either way).
-- **chrF3++ ties chrF3.** Every difference is within noise (±0.09 on 128 verse pairs, about ±0.025 on silver). chrF-B keeps chrF3, the score silnlp already reports and users know how to read.
+- **chrF3++ is slightly better, but not by enough to switch.** It leads on verse preference, usability, silver system level and the challenge set, but every difference is within noise (±0.09 on 128 verse pairs, about ±0.025 on silver). A paired bootstrap over test sets (1,000 resamples of field-test teams, silver test sets and challenge test sets; Mandarin left out, as chrF3++'s word n-grams need spaces between words) confirms it:
+
+  | Test | Test sets | chrF3 | chrF3++ | 95% interval of the gain | chrF3++ ahead in |
+  |---|---|---|---|---|---|
+  | Field tests: verse preference, independent | 18 | 0.617 | 0.633 | −0.027 to +0.071 | 65% |
+  | Field tests: usability, independent | 18 | 0.634 | 0.635 | −0.006 to +0.003 | 71% |
+  | Silver: same verse | 154 | 0.642 | 0.642 | −0.001 to +0.001 | 33% |
+  | Silver: system level | 154 | 0.764 | 0.768 | −0.002 to +0.012 | 87% |
+  | Challenge set: mean over error types | 58 | 0.940 | 0.942 | −0.001 to +0.003 | 90% |
+
+  chrF3++ leans ahead, but every interval includes zero and the gains outside the field tests are 0.1–0.4 points. chrF-B keeps chrF3 because it is the main metric silnlp reports today and the one users know how to read, and because it needs no spaces between words.
 
 **What key terms add.** Without them (chrF3 + 60 × coverage), usability falls from 0.634 to 0.573 and "would this draft help" from 0.549 to 0.485, back to chrF3's level, and on the human-translation test the published translations' share of MT beaten falls from 0.85 to 0.83 (dynamic translations 0.48 to 0.42, CEV 0.18 to 0, NET 0.91 to 0.77). Elsewhere they are neutral or slightly negative. Key terms are where chrF-B's usability edge over chrF3 comes from.
 
