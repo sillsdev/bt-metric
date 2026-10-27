@@ -15,19 +15,36 @@ With normalize, chrF3 is rescaled between a floor and 100 (PLAN.md 2.4) so score
 floor is chrF3 of the references shuffled among themselves, what a verse in the right language but with the wrong
 meaning gets for shared names, punctuation and common words (4 to 26 points across the silver test sets). Within one
 test set the floor is a constant, so it only matters when comparing scores across languages or projects.
+
+chrF-B is only validated on scripts that put spaces between words. Thai, Lao, Khmer, Burmese, Tibetan, Shan and
+Chinese Bibles space phrases, not words (19 to 44 characters between spaces, against at most 10 elsewhere), which leaves
+key terms almost never matched and coverage aligning whole phrases, so scoring them logs a warning.
 """
 
+import logging
 from typing import FrozenSet, Sequence
 
 import numpy as np
 
 from .base import Feature
 
+LOGGER = logging.getLogger(__name__)
+
 COVERAGE_TARGET_COEFFICIENT = 60.0
 KEY_TERMS_COEFFICIENT = 20.0
 
 
 FLOOR_SHUFFLES = 3
+
+# Every Bible and test set checked is at most 10 characters per space-separated word or at least 19.
+MAX_CHARACTERS_PER_WORD = 15.0
+
+
+def lacks_word_spaces(texts: Sequence[str]) -> bool:
+    """Whether the texts' script doesn't put spaces between words, judged by the characters between spaces."""
+    words = sum(len(text.split()) for text in texts)
+    characters = sum(len("".join(text.split())) for text in texts)
+    return words > 0 and characters / words > MAX_CHARACTERS_PER_WORD
 
 
 class ChrFB(Feature):
@@ -39,10 +56,14 @@ class ChrFB(Feature):
         self._coverage = coverage_target
         self._key_terms = key_terms
         self._normalize = normalize
+        self._target_language = ""
+        self._checked_spacing = False
 
     def prepare(
         self, source_language: str, target_language: str, excluded_segments: FrozenSet[str] = frozenset()
     ) -> None:
+        self._target_language = target_language
+        self._checked_spacing = False
         self._coverage.prepare(source_language, target_language, excluded_segments)
         self._key_terms.prepare(source_language, target_language, excluded_segments)
 
@@ -51,12 +72,14 @@ class ChrFB(Feature):
     ) -> np.ndarray:
         # A missing coverage or key-term score (no Bible text to align, no key terms in the reference) is the same
         # for every system scored on the verse, so it counts as 0 and leaves chrF3 to decide.
+        self._check_spacing(references)
         coverage = np.nan_to_num(self._coverage.segment_scores(sources, hypotheses, references))
         key_terms = np.nan_to_num(self._key_terms.segment_scores(sources, hypotheses, references))
         chrf = self._scaled(self._chrf.segment_scores(sources, hypotheses, references), sources, references)
         return chrf + COVERAGE_TARGET_COEFFICIENT * coverage + KEY_TERMS_COEFFICIENT * key_terms
 
     def system_score(self, sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]) -> float:
+        self._check_spacing(references)
         coverage = self._coverage.segment_scores(sources, hypotheses, references)
         key_terms = self._key_terms.segment_scores(sources, hypotheses, references)
         return (
@@ -77,6 +100,18 @@ class ChrFB(Feature):
             shift = 1 + int(rng.integers(len(references) - 1))
             scores.append(self._chrf.system_score(sources, references[shift:] + references[:shift], references))
         return float(np.mean(scores))
+
+    def _check_spacing(self, references: Sequence[str]) -> None:
+        # Once per language pair, so scoring many systems doesn't repeat it.
+        if self._checked_spacing:
+            return
+        self._checked_spacing = True
+        if lacks_word_spaces(references):
+            language = f" for {self._target_language}" if self._target_language else ""
+            LOGGER.warning(
+                f"{self.name}{language} is unreliable: the references don't put spaces between words, and chrF-B is "
+                "only validated on scripts that do. chrF3 is the score to use."
+            )
 
     def _scaled(self, chrf, sources: Sequence[str], references: Sequence[str]):
         if not self._normalize:

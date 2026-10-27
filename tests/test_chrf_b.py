@@ -52,3 +52,26 @@ def test_normalize_rescales_chrf3_between_the_shuffled_references_floor_and_100(
     assert np.allclose(
         normalized.segment_scores(references, hypotheses, references), 100 * (segments - floor) / (100 - floor)
     )
+
+
+def test_scoring_references_without_spaces_between_words_warns_once_per_language_pair(caplog):
+    from btmetric.features.chrf_b import lacks_word_spaces
+
+    spaced = ["In the beginning God created the heavens and the earth."]
+    unspaced = ["太初，上帝创造了天和地。 大地一片混沌，空虚黑暗，上帝的灵运行在水面上。"]
+    assert not lacks_word_spaces(spaced)
+    assert lacks_word_spaces(unspaced)
+
+    zeros = _Fixed([0.0])
+    metric = ChrFB(_Fixed([50.0], system=50.0), zeros, zeros)
+    metric.prepare("en-X", "cmn-Y")
+    with caplog.at_level("WARNING", logger="btmetric.features.chrf_b"):
+        metric.system_score(unspaced, unspaced, unspaced)
+        metric.segment_scores(unspaced, unspaced, unspaced)
+    assert [record.message for record in caplog.records if "cmn-Y" in record.message] and len(caplog.records) == 1
+
+    caplog.clear()
+    metric.prepare("en-X", "en-Y")
+    with caplog.at_level("WARNING", logger="btmetric.features.chrf_b"):
+        metric.system_score(spaced, spaced, spaced)
+    assert not caplog.records
