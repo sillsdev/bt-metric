@@ -147,6 +147,8 @@ uv run btmetric-test-human-translations --features chrf-b --output data/results/
 
 It trains an aligner and infers key-term renderings from the target project's Bible text (with the scored verses left out), so it needs the Scripture extracts on the mounted bucket. Without enough Bible text it falls back to the parts it can score. Verses are paired and aligned as silnlp's `chrf-b` scorer does them, with grow-diag-final-and symmetrization, so the two give the same scores.
 
+To read scores across languages or projects, `chrf-b-norm` rescales the chrF3 part between a floor and 100: 100 × (chrF3 − floor) / (100 − floor), where the floor is chrF3 of the test set's references shuffled among themselves (PLAN.md §2.4). Coverage and key terms are unchanged. Within one test set the floor is a constant, so comparing systems gives the same answer with either; keep raw chrF-B for that, as the significance bands (§5) are in its points. The floor comes from the references scored together, so score a whole test set at once.
+
 ## Metric features
 
 Beyond the baselines, these features are opt-in because each trains a model per language pair. Models train on a Bible-sized amount of text **in the domain being scored** (`btmetric/features/corpora.py`): Bible text for Scripture, and news for WMT, from OPUS News Commentary or, failing that, the judged sets' own source-reference pairs scored in folds. The segments being scored are always left out.

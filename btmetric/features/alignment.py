@@ -17,9 +17,9 @@ from machine.tokenization import LatinWordTokenizer
 from machine.translation import SymmetrizationHeuristic
 from machine.translation.thot import ThotSymmetrizedWordAlignmentModel
 
+from ..scripture.verses import expand_vref
 from ..terms.inference import AlignedVerses
 from .base import Feature
-from ..scripture.verses import expand_vref
 from .corpora import BibleCorpus, ParallelText, TrainingCorpus
 
 if TYPE_CHECKING:

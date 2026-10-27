@@ -43,7 +43,10 @@ def main() -> None:
     parser.add_argument("--scripture-dir", type=Path, default=SCRIPTURE_DIR)
     parser.add_argument("--output", type=Path, default=OUTPUT)
     args = parser.parse_args()
-    read = lambda name: (args.scripture_dir / f"{name}.txt").read_text(encoding="utf-8-sig").splitlines()
+
+    def read(name: str) -> list:
+        return (args.scripture_dir / f"{name}.txt").read_text(encoding="utf-8-sig").splitlines()
+
     lines = combine(read(HEBREW), read(GREEK))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text("\n".join(lines) + "\n", encoding="utf-8")

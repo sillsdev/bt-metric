@@ -10,6 +10,11 @@ Coverage of the hypothesis rises when words with nothing to align to are dropped
 excuse omissions. Between 30 and 135 the field tests and silver labels can't tell coefficients apart; on the
 challenge set, 60 catches 92% of omissions (85% at 135) while still catching 89% of additions and 93% of loops
 (chrF3: 49% and 62%), the best mean over error types.
+
+With normalize, chrF3 is rescaled between a floor and 100 (PLAN.md 2.4) so scores read alike across languages: the
+floor is chrF3 of the references shuffled among themselves, what a verse in the right language but with the wrong
+meaning gets for shared names, punctuation and common words (4 to 26 points across the silver test sets). Within one
+test set the floor is a constant, so it only matters when comparing scores across languages or projects.
 """
 
 from typing import FrozenSet, Sequence
@@ -22,14 +27,18 @@ COVERAGE_TARGET_COEFFICIENT = 60.0
 KEY_TERMS_COEFFICIENT = 20.0
 
 
+FLOOR_SHUFFLES = 3
+
+
 class ChrFB(Feature):
-    name = "chrF-B"
     criterion = "accuracy"
 
-    def __init__(self, chrf: Feature, coverage_target: Feature, key_terms: Feature) -> None:
+    def __init__(self, chrf: Feature, coverage_target: Feature, key_terms: Feature, normalize: bool = False) -> None:
+        self.name = "chrF-B-norm" if normalize else "chrF-B"
         self._chrf = chrf
         self._coverage = coverage_target
         self._key_terms = key_terms
+        self._normalize = normalize
 
     def prepare(
         self, source_language: str, target_language: str, excluded_segments: FrozenSet[str] = frozenset()
@@ -44,17 +53,36 @@ class ChrFB(Feature):
         # for every system scored on the verse, so it counts as 0 and leaves chrF3 to decide.
         coverage = np.nan_to_num(self._coverage.segment_scores(sources, hypotheses, references))
         key_terms = np.nan_to_num(self._key_terms.segment_scores(sources, hypotheses, references))
-        chrf = self._chrf.segment_scores(sources, hypotheses, references)
+        chrf = self._scaled(self._chrf.segment_scores(sources, hypotheses, references), sources, references)
         return chrf + COVERAGE_TARGET_COEFFICIENT * coverage + KEY_TERMS_COEFFICIENT * key_terms
 
     def system_score(self, sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]) -> float:
         coverage = self._coverage.segment_scores(sources, hypotheses, references)
         key_terms = self._key_terms.segment_scores(sources, hypotheses, references)
         return (
-            self._chrf.system_score(sources, hypotheses, references)
+            self._scaled(self._chrf.system_score(sources, hypotheses, references), sources, references)
             + COVERAGE_TARGET_COEFFICIENT * _mean_or_zero(coverage)
             + KEY_TERMS_COEFFICIENT * _mean_or_zero(key_terms)
         )
+
+    def floor(self, sources: Sequence[str], references: Sequence[str]) -> float:
+        """chrF3 of the references shuffled among themselves (rotated, so none stays in place), averaged over a few
+        shuffles. Shuffling within each book instead gives practically the same floor (r = 0.994 on silver)."""
+        references = list(references)
+        if len(references) < 2:
+            return 0.0
+        rng = np.random.default_rng(0)
+        scores = []
+        for _ in range(FLOOR_SHUFFLES):
+            shift = 1 + int(rng.integers(len(references) - 1))
+            scores.append(self._chrf.system_score(sources, references[shift:] + references[:shift], references))
+        return float(np.mean(scores))
+
+    def _scaled(self, chrf, sources: Sequence[str], references: Sequence[str]):
+        if not self._normalize:
+            return chrf
+        floor = self.floor(sources, references)
+        return 100 * (chrf - floor) / (100 - floor)
 
     def close(self) -> None:
         for feature in (self._chrf, self._coverage, self._key_terms):

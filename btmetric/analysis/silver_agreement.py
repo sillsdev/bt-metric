@@ -16,10 +16,10 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
-from ..scripture.verses import expand_vref
 from ..evaluation.loaders import ExperimentOutputsLoader
 from ..meta_eval.agreement import PairwiseAgreement
 from ..meta_eval.runner import FeatureRegistry
+from ..scripture.verses import expand_vref
 
 LOGGER = logging.getLogger(__name__)
 

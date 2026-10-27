@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import Callable, Dict, List, Optional
 
 import numpy as np
-from machine.translation import SymmetrizationHeuristic
 import pandas as pd
+from machine.translation import SymmetrizationHeuristic
 from scipy.stats import kendalltau
 
 from ..evaluation.data import JudgedOutputs, SegmentJudgments
@@ -23,10 +23,10 @@ from ..features.comet import Comet
 from ..features.corpora import BibleCorpus, TrainingCorpus
 from ..features.key_terms import InferredRenderings, KeyTermAccuracy
 from ..features.lexical import Bleu, MeanChrF, NegativeTer
-from ..features.negation import NegationConsistency
-from ..features.unseen_words import UnseenWords, VocabularyCache
 from ..features.naturalness import CharNgramModel, PerplexityRatio
+from ..features.negation import NegationConsistency
 from ..features.reverse_models import FineTunedNllb, ScratchReverseModel
+from ..features.unseen_words import UnseenWords, VocabularyCache
 from .agreement import PairwiseAgreement
 
 LOGGER = logging.getLogger(__name__)
@@ -250,6 +250,13 @@ class FeatureRegistry:
                 AlignmentCoverage("target", aligners=self._aligners),
                 KeyTermAccuracy(renderings=self._renderings),
             ),
+            # chrF-B with chrF3 rescaled above a floor of shuffled references, to read scores across languages.
+            "chrf-b-norm": lambda: ChrFB(
+                ChrF(0),
+                AlignmentCoverage("target", aligners=self._aligners),
+                KeyTermAccuracy(renderings=self._renderings),
+                normalize=True,
+            ),
         }
         # Run only when asked for: neural features need a GPU; sacrebleu's TER is pure Python and takes over an hour
         # on the WMT sets while ranking almost exactly like chrF and BLEU; coverage trains an aligner per language
@@ -285,6 +292,7 @@ class FeatureRegistry:
             "bt-nllb-finetuned",
             "bt-scratch",
             "chrf-b",
+            "chrf-b-norm",
         }
 
     def _coverage_with(self, heuristic: str) -> Feature:

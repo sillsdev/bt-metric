@@ -29,3 +29,26 @@ def test_scores_are_chrf3_plus_coverage_and_key_terms_in_chrf3_points_with_missi
     assert np.allclose(scores, [50 + 0.1 * COVERAGE_TARGET_COEFFICIENT + KEY_TERMS_COEFFICIENT, 40.0])
     system = metric.system_score(["s", "s"], ["h", "h"], ["r", "r"])
     assert np.isclose(system, 45 + 0.1 * COVERAGE_TARGET_COEFFICIENT + KEY_TERMS_COEFFICIENT)
+
+
+def test_normalize_rescales_chrf3_between_the_shuffled_references_floor_and_100():
+    from btmetric.features.chrf import ChrF
+
+    references = ["In the beginning God created", "the heavens and the earth.", "And the earth was without form"]
+    hypotheses = ["In the beginning God made", "the heaven and earth.", "The earth was formless"]
+    zeros = _Fixed([0.0, 0.0, 0.0])
+    raw = ChrFB(ChrF(0), zeros, zeros)
+    normalized = ChrFB(ChrF(0), zeros, zeros, normalize=True)
+    assert normalized.name == "chrF-B-norm" and raw.name == "chrF-B"
+
+    floor = normalized.floor(references, references)
+    assert 0 < floor < 50
+    system = raw.system_score(references, hypotheses, references)
+    assert np.isclose(
+        normalized.system_score(references, hypotheses, references), 100 * (system - floor) / (100 - floor)
+    )
+    assert np.isclose(normalized.system_score(references, references, references), 100.0)
+    segments = raw.segment_scores(references, hypotheses, references)
+    assert np.allclose(
+        normalized.segment_scores(references, hypotheses, references), 100 * (segments - floor) / (100 - floor)
+    )
