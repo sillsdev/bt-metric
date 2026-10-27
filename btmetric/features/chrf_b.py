@@ -109,8 +109,8 @@ class ChrFB(Feature):
         if lacks_word_spaces(references):
             language = f" for {self._target_language}" if self._target_language else ""
             LOGGER.warning(
-                f"{self.name}{language} is unreliable: the references don't put spaces between words, and chrF-B is "
-                "only validated on scripts that do. chrF3 is the score to use."
+                f"{self.name}{language} is unreliable: the references have no word breaks, and chrF-B is only "
+                "validated on scripts that have them. chrF3 is the score to use."
             )
 
     def _scaled(self, chrf, sources: Sequence[str], references: Sequence[str]):
