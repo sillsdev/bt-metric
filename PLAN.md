@@ -877,6 +877,8 @@ The MT source is best or tied everywhere, so chrF-B keeps it. The silver source 
 
 **What key terms add.** Without them (chrF3 + 60 × coverage), usability falls from 0.634 to 0.573 and "would this draft help" from 0.549 to 0.485, back to chrF3's level, and on the human-translation test the published translations' share of MT beaten falls from 0.85 to 0.83 (dynamic translations 0.48 to 0.42, CEV 0.18 to 0, NET 0.91 to 0.77). Elsewhere they are neutral or slightly negative. Key terms are where chrF-B's usability edge over chrF3 comes from.
 
+**Key-term renderings learned with the test references.** The key-term aligner (English BSB with the target) leaves out the test verses, like the coverage aligner. Renderings are only string-matched against both draft and reference, so learning them from the test references too gives neither side an advantage, and the drafts stay out. Doing so gave more verses a key-term score (silver 67.9% → 70.4%, field tests 1,341 → 1,447 verses) but no better agreement: field-test verse preference 0.617 → 0.625 and usability 0.634 → 0.631 (independent references), silver 0.641 / 0.768 → 0.641 / 0.765, published translations unchanged at 0.852, and the challenge set's key-term errors 0.983 for both (0.675 → 0.683 for key terms alone). The test verses stay out of both aligners.
+
 **New features tried in chrF-B (October 2026).** Each added to chrF-B (or, for subword alignment, replacing its coverage), at the weight shown:
 
 | Variant | Field tests: verse preference, independent / all | Comparisons won, independent / all | Usability / would help, independent | Silver: same verse / system level | Challenge set: negation / mean |
@@ -963,21 +965,24 @@ For system comparison, knowing **when a difference is meaningful** is as importa
 - Together with the system-pair analysis (§3.4: about 40% of 250-verse comparisons are not significant), this gives a practical rule: report the paired-bootstrap interval, and treat chrF3 differences under about 1 point as no evidence.
 
 
-**Bible-domain thresholds for chrF3 and chrF-B (October 2026).** No human rankings of Bible systems exist, so the silver table stands in (§3.3c): 1,340 pairs of past silnlp systems on the same test set (about 300 verses each), with xCOMET-XL's preference in place of the humans'. System scores are as users see them: corpus chrF3, and chrF-B as corpus chrF3 + 60 × mean coverage + 20 × mean key-term share (`btmetric-significance-thresholds --silver-rows data/results/silver_rows.tsv`).
+**Bible-domain thresholds for chrF3 and chrF-B (October 2026).** No human rankings of Bible systems exist, so the silver table stands in (§3.3c): 1,340 pairs of past silnlp systems on the same test set, with xCOMET-XL's preference in place of the humans'. The pairs come from 162 test sets of up to 300 verses (median 250, as few as 7). System scores are as users see them: corpus chrF3, and chrF-B as corpus chrF3 + 60 × mean coverage + 20 × mean key-term share (`btmetric-significance-thresholds --silver-rows data/results/silver_rows.tsv`).
 
-| System-level difference | chrF3: xCOMET-XL agrees (pairs) | chrF-B: xCOMET-XL agrees (pairs) |
-|---|---|---|
-| 0–0.5 points | 0.61 (362) | 0.56 (251) |
-| 0.5–1 | 0.79 (210) | 0.73 (211) |
-| 1–2 | 0.81 (262) | 0.83 (268) |
-| 2–4 | 0.77 (220) | 0.81 (197) |
-| over 4 | 0.83 (286) | 0.86 (413) |
-| all pairs | 0.75 | 0.77 |
+Most test sets give one pair, but one experiment gives 276 (20%), mostly checkpoints and near-identical configs. So each test set's pairs are capped at a total weight of 10 (each pair weighted min(1, 10 ÷ the test set's pairs)), and intervals resample whole test sets (1,000 times). The cap isn't in `btmetric-significance-thresholds` yet; the uncapped numbers are what it prints.
 
-- **The same shape as on news:** under half a point, agreement is not much better than a coin flip; from half a point to 1 it is in the 70s; from 1 point it reaches the low 80s; it levels off near 85%. The plateau is partly xCOMET-XL's own error, so the true ceiling is unknown, and the logistic curve's "90%" differences (13–17 points) are extrapolations.
-- **chrF-B's differences are slightly more trustworthy from 1 point up** (0.81–0.86 against chrF3's 0.77–0.83), and they run larger: coverage and key terms add spread, so more pairs fall in the over-4 band.
-- **Practical rule for chrF-B:** treat differences under 0.5 points as a tie; 0.5–1 points as weak evidence (about 73%); 1–2 points as probably real (about 80%); over 2 points as about as reliable as the silver labels can tell (81–86%; the 2–4 band's dip below 1–2 is noise). Report the paired-bootstrap interval alongside.
-- **Caveats:** silver labels are a metric, not people; many pairs are checkpoints or near-identical configs of one experiment; test sets here are about 300 verses, and a whole held-out book makes smaller differences reliable.
+| System-level difference | chrF3: xCOMET-XL agrees, cap 10 (uncapped; pairs) | chrF-B: cap 10 (uncapped; pairs) | chrF-B, cap 10: 95% interval |
+|---|---|---|---|
+| 0–0.5 points | 0.62 (0.61; 362) | 0.55 (0.56; 251) | 0.47–0.62 |
+| 0.5–1 | 0.77 (0.79; 210) | 0.74 (0.73; 211) | 0.65–0.82 |
+| 1–2 | 0.83 (0.81; 262) | 0.82 (0.83; 268) | 0.74–0.89 |
+| 2–4 | 0.85 (0.77; 220) | 0.85 (0.81; 197) | 0.77–0.92 |
+| over 4 | 0.88 (0.83; 286) | 0.86 (0.86; 413) | 0.76–0.95 |
+
+- **The same shape as on news:** under half a point, agreement is not much better than a coin flip; from half a point to 1 it is in the 70s; from 1 point it reaches the 80s and levels off near 85%. The plateau is partly xCOMET-XL's own error, so the true ceiling is unknown, and the logistic curve's "90%" differences (13–17 points) are extrapolations.
+- **The cap changes little.** Caps of 5 and 20 and equal weight per test set give the same bands within a few points. It removes the uncapped 2–4 dip below 1–2, which came from the 276-pair experiment, so agreement rises steadily with the difference.
+- **chrF3 and chrF-B are level from 1 point up.** chrF-B's differences run larger, as coverage and key terms add spread, so more of its pairs fall in the over-4 band.
+- **The bands above 1 point can't be told apart** (intervals about ±8 points); the clear steps are at about 0.5 and 1 point.
+- **Practical rule for chrF-B:** treat differences under 0.5 points as a tie (55%); 0.5–1 points as likely real (about 74%, three times in four); 1–2 points as very likely (about 82%); over 2 points as about as sure as the silver labels can tell (85–86%), since xCOMET-XL's own errors hide any further gain. Report the paired-bootstrap interval alongside.
+- **Caveats:** silver labels are a metric, not people; test sets here are mostly 250–300 verses, and a whole held-out book makes smaller differences reliable.
 
 ---
 
