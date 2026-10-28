@@ -14,7 +14,13 @@ from scipy.stats import kendalltau
 
 from ..evaluation.data import JudgedOutputs, SegmentJudgments
 from ..evaluation.loaders import AfriMteLoader, WmtDaLoader, WmtMqmLoader
-from ..features.alignment import AlignerCache, AlignmentCoverage, PivotCoverage, ReferenceAnchoredCoverage
+from ..features.alignment import (
+    AlignerCache,
+    AlignmentCoverage,
+    PivotCoverage,
+    ReferenceAnchoredCoverage,
+    WordOrder,
+)
 from ..features.back_translation import BackTranslationInfo
 from ..features.base import Feature
 from ..features.chrf import ChrF
@@ -244,6 +250,9 @@ class FeatureRegistry:
             "negation-missing": lambda: NegationConsistency(renderings=self._renderings, missing_only=True),
             "unseen-words": lambda: UnseenWords(vocabularies=self._vocabularies),
             "unseen-words-implausible": lambda: UnseenWords(implausible_only=True, vocabularies=self._vocabularies),
+            # How far the draft's reordering of the source differs from the reference's (calqued or scrambled order).
+            "word-order": lambda: WordOrder(aligners=self._aligners),
+            "word-order-literal": lambda: WordOrder(literal_only=True, aligners=self._aligners),
             # The recommended metric (PLAN.md 4.1): chrF3, coverage of the hypothesis and key terms, in chrF3 points.
             "chrf-b": lambda: ChrFB(
                 ChrF(0),
@@ -288,6 +297,8 @@ class FeatureRegistry:
             "negation-missing",
             "unseen-words",
             "unseen-words-implausible",
+            "word-order",
+            "word-order-literal",
             "bt-nllb",
             "bt-nllb-finetuned",
             "bt-scratch",

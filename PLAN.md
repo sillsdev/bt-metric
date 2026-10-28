@@ -619,6 +619,24 @@ Team 25 adds 54 usability ratings (chrF3 still leads on usability, at 0.57). Tea
 - **Perplexity is not a separate naturalness measure**: it flags only what chrF3 already flags, and it penalizes other registers (§3.3b). Drop it.
 - About 100 comparisons were run on a small sample, so a few p-values under 0.05 are chance; the key-term and proper-name results are the strongest.
 
+**Word order** (`word-order`, `word-order-literal`, opt-in). The crossing rate of a verse's grow-diag-final-and links is the share of link pairs, distinct on both sides, whose order flips between source and target. `word-order` is −|hypothesis − reference| of that rate. `word-order-literal` is min(hypothesis − reference, 0), so it penalizes only a draft that keeps closer to the source order than the reference does (a calque). Ties are excluded from the field-test numbers:
+
+| Test | chrF3 | chrF-B | word-order | word-order-literal |
+|---|---|---|---|---|
+| Verse preference, independent references | 0.60 (127 pairs) | — | **0.64** (75, p = 0.02) | 0.42 (41) |
+| Verse preference, all references | 0.54 | — | 0.52 | 0.33 (81, p < 0.01) |
+| "Sounds right" rating | **0.65** | 0.64 | 0.61 | 0.56 |
+| Verse marked with a word-order error (167 of 624) | 0.71 | 0.72 | **0.91** (153) | 1.00 (71) |
+| Challenge set: calque (1,981 verses) | 0.78 | **0.81** | 0.64 | 0.73 (0.95 decided, 23% ties) |
+| Challenge set: word-order scramble (11,331) | 0.93 | **0.95** | 0.60 | 0.09 |
+
+The calques reorder each MT output's words by the mean source position of their intersection links, using the same eflomal aligner, so the check favours the features. Human translations (§3.3b): `word-order` puts NLT and GNT below every MT system (0.00); `word-order-literal` puts YLT at 0.00 and LSV at 0.82, and every other translation at 1.00 (CEV gets no score).
+
+- **The two-sided feature catches marked word-order errors but penalizes free translation.** It ranks the draft without the marked error higher 91% of the time, against 71% for chrF3. But many references were edited from a draft, and the marked errors go both ways (8 more source-like, 9 more scrambled, 11 neither). It also drops dynamic translations to 0.00 and is weak on both challenge-set perturbations.
+- **The one-sided feature is precise but rarely decides.** When it scores the calque differently it is right 95% of the time, but it ties on 23% of calques and doesn't respond to scrambles. Teams preferred the more source-ordered draft (0.33 on all references), so "closer to source order is worse" doesn't hold for them in general.
+- **chrF already catches most calques and scrambles**: reordering breaks character n-grams. chrF-B + 40 × word-order raises verse preference with independent references from 0.617 to 0.656, within noise at this sample size.
+- **Neither enters chrF-B.** `word-order-literal` is a candidate diagnostic for drafts that follow the source order too closely.
+
 Still to do: the teams' corrections as references (they post-edit the very draft judged, so they mostly measure edit distance), and the Team 24 and Team 25 error analyses (a transposed layout).
 
 ### 3.4 Baselines

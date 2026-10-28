@@ -123,3 +123,27 @@ def test_subword_coverage_penalizes_additions(tmp_path: Path):
     sources, references = ["jesus spoke to them"], ["yesu aliongea nao"]
     assert feature.segment_scores(sources, ["yesu aliongea nao xyzzy plugh qwerty"], references)[0] < -0.2
     assert feature.segment_scores(sources, references, references)[0] == 0.0
+
+
+def test_word_order_penalizes_a_draft_that_copies_the_source_word_order(tmp_path: Path):
+    from btmetric.features.alignment import WordOrder
+
+    english = ["the king saw the prophet", "the prophet saw the people", "the people heard the king"]
+    words = {"the": "ka", "king": "mfalme", "saw": "aliona", "prophet": "nabii", "people": "watu", "heard": "alisikia"}
+    # A target language that puts the words of every verse in the reverse of the English order.
+    reversed_order = [" ".join(words[w] for w in reversed(verse.split())) for verse in english]
+    vrefs = [f"GEN 1:{i + 1}" for i in range(1500)]
+    (tmp_path / "vref.txt").write_text("\n".join(vrefs) + "\n", encoding="utf-8")
+    (tmp_path / "en-TEST.txt").write_text("\n".join(english * 500) + "\n", encoding="utf-8")
+    (tmp_path / "xx-TEST.txt").write_text("\n".join(reversed_order * 500) + "\n", encoding="utf-8")
+    corpus = BibleCorpus(
+        scripture_dirs=(tmp_path,), corpora_table=tmp_path / "none.tsv", vref_path=tmp_path / "vref.txt"
+    )
+
+    sources, references = [english[0]], [reversed_order[0]]
+    calque = [" ".join(words[w] for w in english[0].split())]
+    two_sided, literal = WordOrder(corpus=corpus), WordOrder(literal_only=True, corpus=corpus)
+    for feature in (two_sided, literal):
+        feature.prepare("en-TEST", "xx-TEST")
+        assert feature.segment_scores(sources, references, references)[0] == 0.0
+        assert feature.segment_scores(sources, calque, references)[0] < -0.5

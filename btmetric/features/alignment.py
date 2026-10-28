@@ -148,6 +148,20 @@ class WordAligner:
             )
         ]
 
+    def crossing_rates(self, sources: Sequence[str], targets: Sequence[str]) -> np.ndarray:
+        """Per pair: of every two alignment links that differ on both sides, the share whose order differs between
+        source and target. 0 when the target follows the source word order; NaN with fewer than two such links."""
+        rates = []
+        for word_pairs, _, _ in self._aligned(sources, targets, SymmetrizationHeuristic.GROW_DIAG_FINAL_AND):
+            crossed = compared = 0
+            for i, (source_i, target_i, _) in enumerate(word_pairs):
+                for source_j, target_j, _ in word_pairs[i + 1 :]:
+                    if source_i != source_j and target_i != target_j:
+                        compared += 1
+                        crossed += (source_i < source_j) != (target_i < target_j)
+            rates.append(crossed / compared if compared else np.nan)
+        return np.array(rates)
+
     def _best_scores(
         self, sources: Sequence[str], targets: Sequence[str], weighted: bool, heuristic: SymmetrizationHeuristic
     ) -> List[Tuple[Dict[int, float], Dict[int, float], int, int]]:
@@ -337,6 +351,43 @@ class PivotCoverage(Feature):
             reference_coverage = self._aligner.coverage(verses, [references[i] for i in found])[1]
             scores[found] = hypothesis_coverage - reference_coverage
         return scores
+
+
+class WordOrder(Feature):
+    """Naturalness of word order: how far the hypothesis's reordering of the source differs from the reference's.
+
+    MT that copies the source word order (a calque) crosses fewer alignment links than a natural translation, so
+    its crossing rate falls below the reference's. With literal_only, only that shortfall counts; otherwise any
+    difference from the reference's reordering does, which also catches scrambled order.
+    """
+
+    criterion = "naturalness"
+
+    def __init__(
+        self,
+        literal_only: bool = False,
+        corpus: Optional[TrainingCorpus] = None,
+        aligners: Optional[AlignerCache] = None,
+    ) -> None:
+        self.name = "word-order-literal" if literal_only else "word-order"
+        self._literal_only = literal_only
+        self._aligners = aligners or AlignerCache(corpus)
+        self._aligner: Optional[WordAligner] = None
+
+    def prepare(
+        self, source_language: str, target_language: str, excluded_segments: FrozenSet[str] = frozenset()
+    ) -> None:
+        self._aligner = self._aligners.get(source_language, target_language, excluded_segments)
+
+    def segment_scores(
+        self, sources: Sequence[str], hypotheses: Sequence[str], references: Sequence[str]
+    ) -> np.ndarray:
+        if self._aligner is None:
+            return np.full(len(hypotheses), np.nan)
+        difference = self._aligner.crossing_rates(sources, hypotheses) - self._aligner.crossing_rates(
+            sources, references
+        )
+        return np.minimum(difference, 0.0) if self._literal_only else -np.abs(difference)
 
 
 class ReferenceAnchoredCoverage(Feature):
