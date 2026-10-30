@@ -13,6 +13,7 @@ from typing import Dict, List, Set
 import numpy as np
 import pandas as pd
 
+from ..paths import SCRIPTURE_DIR, TERMS_DIR
 from .inference import AlignedVerses, InferredRendering, RenderingInferrer, specific_renderings
 from .major_terms import MajorTermList
 
@@ -145,8 +146,8 @@ class ValidationProjects:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Validate alignment-inferred key term renderings")
-    parser.add_argument("--terms-dir", type=Path, default=Path("M:/MT/terms"))
-    parser.add_argument("--scripture-dir", type=Path, default=Path("M:/MT/scripture"))
+    parser.add_argument("--terms-dir", type=Path, default=TERMS_DIR)
+    parser.add_argument("--scripture-dir", type=Path, default=SCRIPTURE_DIR)
     parser.add_argument("--assets-dir", type=Path, default=Path("../silnlp/silnlp/assets"))
     parser.add_argument("--english", default="en-BSB")
     parser.add_argument("--projects", type=int, default=30)

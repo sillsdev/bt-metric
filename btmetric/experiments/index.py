@@ -202,7 +202,7 @@ def _normalized_bytes(path: Path) -> bytes:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Index the test predictions of silnlp experiments")
-    parser.add_argument("root", type=Path, help="The experiments directory, e.g. M:/MT/experiments")
+    parser.add_argument("root", type=Path, help="The experiments directory, e.g. $SIL_NLP_DATA_PATH/MT/experiments")
     parser.add_argument("--output", type=Path, default=Path("data/experiments.tsv"))
     parser.add_argument("--max-depth", type=int, default=4, help="How many directory levels below root to search")
     parser.add_argument("--workers", type=int, default=16)

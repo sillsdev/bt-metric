@@ -11,6 +11,8 @@ from typing import Dict, Iterator, List, Optional, Set
 
 import pandas as pd
 
+from ..paths import PARATEXT_DIR, SCRIPTURE_DIR
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -160,8 +162,8 @@ class BackTranslationPairer:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Pair human back translation extracts with their base projects")
-    parser.add_argument("--projects", type=Path, default=Path("M:/Paratext/projects"))
-    parser.add_argument("--scripture", type=Path, default=Path("M:/MT/scripture"))
+    parser.add_argument("--projects", type=Path, default=PARATEXT_DIR)
+    parser.add_argument("--scripture", type=Path, default=SCRIPTURE_DIR)
     parser.add_argument("--output", type=Path, default=Path("data/back_translations.tsv"))
     parser.add_argument("--workers", type=int, default=32)
     args = parser.parse_args()

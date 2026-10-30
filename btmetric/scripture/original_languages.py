@@ -7,9 +7,10 @@ import re
 import unicodedata
 from pathlib import Path
 
+from ..paths import SCRIPTURE_DIR
+
 LOGGER = logging.getLogger(__name__)
 
-SCRIPTURE_DIR = Path("M:/MT/scripture")
 HEBREW = "hbo-hbo_uhb_2024_07_10"
 GREEK = "grc-el_x_koine_ugnt_2024_07_11"
 OUTPUT = Path("data/scripture/orig-UHB_UGNT.txt")

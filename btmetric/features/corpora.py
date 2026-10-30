@@ -18,6 +18,7 @@ from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 
 import pandas as pd
 
+from ..paths import EBIBLE_SCRIPTURE_DIR, SCRIPTURE_DIR
 from ..scripture.corpora import EvaluationLanguages
 from ..scripture.verses import parallel_verses
 
@@ -57,7 +58,7 @@ class BibleCorpus(TrainingCorpus):
     resolves to the extract btmetric-find-bible-corpora selected for it. Excluded segments are verse references."""
 
     # data/scripture holds extracts built here, such as the original-language Bible.
-    scripture_dirs: Tuple[Path, ...] = (Path("M:/MT/scripture"), Path("M:/eBible/MT/scripture"), Path("data/scripture"))
+    scripture_dirs: Tuple[Path, ...] = (SCRIPTURE_DIR, EBIBLE_SCRIPTURE_DIR, Path("data/scripture"))
     corpora_table: Path = Path("data/bible_corpora.tsv")
     vref_path: Path = Path("../silnlp/silnlp/assets/vref.txt")
 

@@ -19,6 +19,7 @@ import pandas as pd
 from ..evaluation.loaders import ExperimentOutputsLoader
 from ..meta_eval.agreement import PairwiseAgreement
 from ..meta_eval.runner import FeatureRegistry
+from ..paths import EXPERIMENTS_DIR
 from ..scripture.verses import expand_vref
 
 LOGGER = logging.getLogger(__name__)
@@ -214,7 +215,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Agreement of metric features with xCOMET-XL silver labels")
     parser.add_argument("step", choices=["select", "score", "agree"])
     parser.add_argument("--table", type=Path, default=Path("data/results/silver_rows.tsv"))
-    parser.add_argument("--experiments-root", type=Path, default=Path("M:/MT/experiments"))
+    parser.add_argument("--experiments-root", type=Path, default=EXPERIMENTS_DIR)
     parser.add_argument("--index", type=Path, default=Path("data/experiments.tsv"))
     parser.add_argument("--verses-per-set", type=int, default=300)
     parser.add_argument("--seed", type=int, default=0)

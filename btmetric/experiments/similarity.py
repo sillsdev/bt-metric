@@ -61,7 +61,9 @@ class PairDifferences:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Measure how much the outputs in each system pair differ")
-    parser.add_argument("experiments_root", type=Path, help="The experiments directory, e.g. M:/MT/experiments")
+    parser.add_argument(
+        "experiments_root", type=Path, help="The experiments directory, e.g. $SIL_NLP_DATA_PATH/MT/experiments"
+    )
     parser.add_argument("--pairs", type=Path, default=Path("data/system_pairs.tsv"))
     parser.add_argument(
         "--min-differing-fraction",

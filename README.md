@@ -11,14 +11,16 @@ uv sync
 uv run pytest
 ```
 
+Most steps read past silnlp experiments, Scripture extracts and Paratext projects from the SIL NLP data bucket. Point `SIL_NLP_DATA_PATH` at where it is mounted, as for silnlp (for example `export SIL_NLP_DATA_PATH=/mnt/sil-nlp` on Linux); if it isn't set, the bucket is taken to be at `M:/`. The commands below use bash syntax; in PowerShell write `$env:SIL_NLP_DATA_PATH`.
+
 On Windows, run isort with `PYTHONUTF8=1` set. Some files contain text in other scripts, and isort otherwise reads them with the system code page and silently skips them.
 
 ## Past silnlp experiments as system pairs
 
-Index every saved test prediction under the experiments folder (the S3 bucket mounted at `M:` here). It records each output's test set hash, prediction hash, config and test design:
+Index every saved test prediction under the experiments folder in the data bucket. It records each output's test set hash, prediction hash, config and test design:
 
 ```
-uv run btmetric-index-experiments M:/MT/experiments --output data/experiments.tsv
+uv run btmetric-index-experiments "$SIL_NLP_DATA_PATH/MT/experiments" --output data/experiments.tsv
 ```
 
 Find the pairs of distinct outputs scored on the identical test set (same verses, same reference), labelled as `checkpoint` (two steps of one experiment), `rerun` (same config) or `config` (different configs, with the differing config keys):
@@ -30,7 +32,7 @@ uv run btmetric-find-system-pairs --index data/experiments.tsv --output data/sys
 Count the verses on which each pair's outputs differ. This adds `differing_verses`, `differing_fraction` and `near_identical` (under 10% of verses differ, by default) to the pairs file. Pairs whose predictions can't be aligned verse by verse get no fraction:
 
 ```
-uv run btmetric-measure-pair-differences M:/MT/experiments --pairs data/system_pairs.tsv
+uv run btmetric-measure-pair-differences "$SIL_NLP_DATA_PATH/MT/experiments" --pairs data/system_pairs.tsv
 ```
 
 Score the usable config pairs with the baselines: how often baselines disagree on the better system, and how often differences are significant (`--resume` scores only test sets missing from the output):
@@ -41,10 +43,10 @@ uv run btmetric-score-system-pairs
 
 ## Human back translations
 
-Pair each human back translation extract in `MT/scripture` with an extract of the vernacular project it translates, using the base project recorded in each Paratext project's `Settings.xml`:
+Pair each human back translation extract in `MT/scripture` with an extract of the vernacular project it translates, using the base project recorded in each Paratext project's `Settings.xml` (in `Paratext/projects`):
 
 ```
-uv run btmetric-pair-back-translations --projects M:/Paratext/projects --scripture M:/MT/scripture
+uv run btmetric-pair-back-translations
 ```
 
 ## Public human-judgment datasets
@@ -57,10 +59,10 @@ uv run btmetric-download-datasets
 
 ## Bible corpora for the simulated low-resource setup
 
-List the Scripture extracts available in each language of the human-judgment sets, with verse counts, and pick the most complete one (or a preferred one, set in `btmetric/scripture/evaluation_languages.tsv`):
+List the Scripture extracts available in each language of the human-judgment sets, with verse counts, and pick the most complete one (or a preferred one, set in `btmetric/scripture/evaluation_languages.tsv`). It searches `MT/scripture` and `eBible/MT/scripture` in the bucket:
 
 ```
-uv run btmetric-find-bible-corpora --scripture M:/MT/scripture M:/eBible/MT/scripture
+uv run btmetric-find-bible-corpora
 ```
 
 ## Meta-evaluation

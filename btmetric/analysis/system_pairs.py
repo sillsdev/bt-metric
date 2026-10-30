@@ -19,6 +19,7 @@ from ..evaluation.data import JudgedOutputs
 from ..evaluation.loaders import ExperimentOutputsLoader
 from ..features.base import Feature
 from ..meta_eval.runner import FeatureRegistry
+from ..paths import EXPERIMENTS_DIR
 
 LOGGER = logging.getLogger(__name__)
 
@@ -107,7 +108,7 @@ def summarize(table: pd.DataFrame, feature_names: List[str]) -> str:
 def main() -> None:
     registry = FeatureRegistry()
     parser = argparse.ArgumentParser(description="Score past silnlp system pairs with the baselines")
-    parser.add_argument("--experiments-root", type=Path, default=Path("M:/MT/experiments"))
+    parser.add_argument("--experiments-root", type=Path, default=EXPERIMENTS_DIR)
     parser.add_argument("--index", type=Path, default=Path("data/experiments.tsv"))
     parser.add_argument("--pairs", type=Path, default=Path("data/system_pairs.tsv"))
     parser.add_argument("--features", nargs="+", default=["chrf3", "m-chrf3", "bleu", "spbleu"])

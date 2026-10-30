@@ -16,6 +16,7 @@ import pandas as pd
 
 from ..evaluation.data import JudgedOutputs
 from ..evaluation.loaders import ExperimentOutputsLoader
+from ..paths import EXPERIMENTS_DIR
 from .calibration import ErrorSignatures
 from .challenge_set import ChallengeRow, HeldOutTestSets
 
@@ -88,7 +89,7 @@ class NaturalErrorPairs:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Build challenge rows from real MT errors")
-    parser.add_argument("--experiments-root", type=Path, default=Path("M:/MT/experiments"))
+    parser.add_argument("--experiments-root", type=Path, default=EXPERIMENTS_DIR)
     parser.add_argument("--index", type=Path, default=Path("data/experiments.tsv"))
     parser.add_argument("--test-sets", type=int, default=60)
     parser.add_argument("--max-pairs-per-type", type=int, default=50, help="Per test set and error type")

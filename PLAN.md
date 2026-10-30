@@ -1006,7 +1006,7 @@ Research code lives in this repository and uses silnlp as a library. The final m
 
 **Operational constraint:** silnlp's `AGENTS.md` allows **only one remote ClearML job at a time** across all sessions. Check with `scripts/check_clearml_jobs.py` before submitting. Training many Bible-only auxiliary models and silver-label systems has to be scheduled with this in mind; run locally where possible.
 
-### 6.2 Experiment and Scripture data (S3 bucket, mounted at `M:`)
+### 6.2 Experiment and Scripture data (S3 bucket, mounted at `SIL_NLP_DATA_PATH` or `M:`)
 
 **`MT/experiments`** holds about 390 top-level series folders: projects by country, `FT-*` fine-tuning series, `BT-*` back-translation-direction series, and `Research.*` folders such as `Research.LLM.ICL`.
 

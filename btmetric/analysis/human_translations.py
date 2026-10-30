@@ -18,6 +18,7 @@ import pandas as pd
 from ..evaluation.data import JudgedOutputs
 from ..evaluation.loaders import ExperimentOutputsLoader
 from ..meta_eval.runner import FeatureRegistry
+from ..paths import EXPERIMENTS_DIR, SCRIPTURE_DIR
 
 LOGGER = logging.getLogger(__name__)
 
@@ -117,10 +118,10 @@ def summarize(scores: pd.DataFrame) -> pd.DataFrame:
 def main() -> None:
     registry = FeatureRegistry()
     parser = argparse.ArgumentParser(description="Score other human translations against an experiment reference")
-    parser.add_argument("--experiments-root", type=Path, default=Path("M:/MT/experiments"))
+    parser.add_argument("--experiments-root", type=Path, default=EXPERIMENTS_DIR)
     parser.add_argument("--index", type=Path, default=Path("data/experiments.tsv"))
     parser.add_argument("--test-hash", default="4b611a0f04920d6b", help="Default: Hebrew OT -> English NASB")
-    parser.add_argument("--scripture", type=Path, default=Path("M:/MT/scripture"))
+    parser.add_argument("--scripture", type=Path, default=SCRIPTURE_DIR)
     parser.add_argument(
         "--alternatives",
         nargs="+",

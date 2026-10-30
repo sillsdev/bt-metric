@@ -17,6 +17,7 @@ import pandas as pd
 from ..evaluation.data import JudgedOutputs
 from ..evaluation.loaders import ExperimentOutputsLoader
 from ..meta_eval.runner import FeatureRegistry
+from ..paths import EXPERIMENTS_DIR, SCRIPTURE_DIR, TERMS_DIR
 from ..terms.major_terms import MajorTermList, ProjectKeyTerms, find_renderings_file
 from ..terms.project_alignment import ProjectAlignment
 from .perturbations import Perturbation, VerseContext, all_perturbations
@@ -233,11 +234,11 @@ class HeldOutTestSets:
 
 def build_main() -> None:
     parser = argparse.ArgumentParser(description="Build a Bible challenge set of perturbed MT outputs")
-    parser.add_argument("--experiments-root", type=Path, default=Path("M:/MT/experiments"))
+    parser.add_argument("--experiments-root", type=Path, default=EXPERIMENTS_DIR)
     parser.add_argument("--index", type=Path, default=Path("data/experiments.tsv"))
-    parser.add_argument("--terms-dir", type=Path, default=Path("M:/MT/terms"))
+    parser.add_argument("--terms-dir", type=Path, default=TERMS_DIR)
     parser.add_argument("--assets-dir", type=Path, default=Path("../silnlp/silnlp/assets"))
-    parser.add_argument("--scripture-dir", type=Path, default=Path("M:/MT/scripture"))
+    parser.add_argument("--scripture-dir", type=Path, default=SCRIPTURE_DIR)
     parser.add_argument("--english", default="en-BSB", help="English extract aligned with each target")
     parser.add_argument(
         "--min-term-confidence", type=float, default=0.5, help="Minimum confidence of inferred renderings"

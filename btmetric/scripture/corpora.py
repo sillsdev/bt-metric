@@ -9,6 +9,8 @@ from typing import Dict, List, Optional
 
 import pandas as pd
 
+from ..paths import EBIBLE_SCRIPTURE_DIR, EXPERIMENTS_DIR, SCRIPTURE_DIR
+
 LOGGER = logging.getLogger(__name__)
 
 
@@ -132,10 +134,8 @@ class CorpusFinder:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Find Bible extracts for the languages of the human-judgment sets")
-    parser.add_argument(
-        "--scripture", type=Path, nargs="+", default=[Path("M:/MT/scripture"), Path("M:/eBible/MT/scripture")]
-    )
-    parser.add_argument("--verse-counts", type=Path, default=Path("M:/MT/experiments/verse_counts/verse_counts.csv"))
+    parser.add_argument("--scripture", type=Path, nargs="+", default=[SCRIPTURE_DIR, EBIBLE_SCRIPTURE_DIR])
+    parser.add_argument("--verse-counts", type=Path, default=EXPERIMENTS_DIR / "verse_counts" / "verse_counts.csv")
     parser.add_argument("--output", type=Path, default=Path("data/bible_corpora.tsv"))
     parser.add_argument("--workers", type=int, default=16)
     args = parser.parse_args()

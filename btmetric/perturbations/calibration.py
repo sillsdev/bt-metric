@@ -18,6 +18,7 @@ from sacrebleu.metrics import CHRF
 
 from ..evaluation.data import JudgedOutputs
 from ..evaluation.loaders import ExperimentOutputsLoader
+from ..paths import EXPERIMENTS_DIR
 from .challenge_set import HeldOutTestSets
 
 LOGGER = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ class ErrorRates:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Measure how often real MT outputs show each error signature")
-    parser.add_argument("--experiments-root", type=Path, default=Path("M:/MT/experiments"))
+    parser.add_argument("--experiments-root", type=Path, default=EXPERIMENTS_DIR)
     parser.add_argument("--index", type=Path, default=Path("data/experiments.tsv"))
     parser.add_argument("--test-sets", type=int, default=60)
     parser.add_argument("--verses-per-output", type=int, default=200)
