@@ -79,7 +79,7 @@ Most projects have no Biblical Terms renderings, so the key term feature and the
 - **Proper names are reliable.** Other categories need better matching (stem grouping of aligned words, multi-word renderings) before the key-term feature relies on them; a higher confidence threshold barely helps them.
 - **Corpus size matters somewhat** (correlation 0.32 with verse count): projects under ~8,000 verses mostly score 0.37–0.53.
 - **Threshold.** The challenge set and the key term features use inferred renderings with confidence ≥ 0.6, after the specificity filter of §2.2.2.
-- **Data problems found:** `xyz-XYZ_2026_03_18` is mis-encoded (skipped automatically), and the `bi-ABC_2026_02_16` extract is English text under a Bislama code. Projects with only one or two comparable terms give meaningless per-project precision, but carry no weight in the pooled figures.
+- **Data problems found:** one extract is mis-encoded (skipped automatically), and another is English text under a Bislama code. Projects with only one or two comparable terms give meaningless per-project precision, but carry no weight in the pooled figures.
 
 **Constraints on auxiliary models.** To match real minority-language conditions:
 
@@ -112,7 +112,7 @@ At the features' confidence threshold of 0.6, it raises precision from 0.766 to 
 
 **Fixes found while evaluating:**
 
-- *Extract names.* Experiment configs don't always name an extract as it is stored: some add a suffix (`qac-ABCD-QAC` is `qac-ABCD.txt`), and many extracts are dated. The lookup now tries the exact name, its dated versions, and the name with trailing segments removed, before falling back to the language's selected corpus.
+- *Extract names.* Experiment configs don't always name an extract as it is stored: some add a suffix (`xyz-ABC-XYZ` is `xyz-ABC.txt`), and many extracts are dated. The lookup now tries the exact name, its dated versions, and the name with trailing segments removed, before falling back to the language's selected corpus.
 - *Missing scores.* The challenge-set evaluation counted a row with no feature score as a failure. Such rows are now left out, and the number of scored rows is reported. Feature results computed before this fix are superseded.
 
 **Results on the synthetic challenge set** (71,737 rows, 58 test sets; share of rows where the feature strictly prefers the unperturbed output):
@@ -489,7 +489,7 @@ Then:
   | output < 60% of reference length (omission or truncation) | 1.6% | 0.7% |
 
   Repeated n-grams anywhere in the verse occur in 6.2% of verses, but a spot check found about a third of those are legitimate parallelism, so the back-to-back count is the calibrated one. Weighting accuracy by these rates gives spBLEU 0.92, BLEU 0.90 and **chrF3 0.75**: on the error mix real outputs show, chrF3 does worst of the lexical baselines. Over-long output isn't always an addition, so the addition weight is an upper bound.
-- **Data quality.** Some extracts are mis-encoded on the bucket (UTF-8 decoded as cp1252, e.g. `xyz-XYZ_2026_03_18`). Rendering validation detects and skips them; they should be reported and re-extracted.
+- **Data quality.** Some extracts are mis-encoded on the bucket (UTF-8 decoded as cp1252). Rendering validation detects and skips them; they should be reported and re-extracted.
 - **Still to do:**
   - rebuild the challenge set with inferred key terms and negation
   - evaluate the neural baselines on it
@@ -537,7 +537,7 @@ None beats chrF3 alone; the detectors mostly tie. They matter only in combinatio
 
 **d. Quality ladders.** Train systems on 1k, 2k, 4k, … verses, or take checkpoints, and check that the metric recovers the expected order. Past experiments (§6.2) already provide many of these in real minority languages: series that vary the amount of training data, the sources or the model, plus two saved checkpoints for most experiments. It's a weak test, meaningful only where the quality steps are large. It must not depend on chrF-based checkpoint selection, which would be circular.
 
-**e. Human back-translations as a real-world check.** Some Paratext projects have a human back-translation project (the "Back Translation" project type in silnlp onboarding). These show up in `MT/scripture` as English-coded extracts, about 336 files with "BT" in the name, e.g. `en-ABCBT_2023_11_30`. That count includes dated versions and maybe false matches, so there are fewer distinct projects. Several are already used as training sources in past experiments. Where one exists:
+**e. Human back-translations as a real-world check.** Some Paratext projects have a human back-translation project (the "Back Translation" project type in silnlp onboarding). These show up in `MT/scripture` as English-coded extracts, about 336 files with "BT" in the name, e.g. `en-XYZBT_2023_11_30`. That count includes dated versions and maybe false matches, so there are fewer distinct projects. Several are already used as training sources in past experiments. Where one exists:
 
 - Compare generated back-translations of the **reference** against the human back-translation.
 - This measures back-translation quality and memorization leakage on **real minority-language text**, without new annotation.
@@ -552,7 +552,7 @@ None beats chrF3 alone; the detectors mostly tie. They matter only in combinatio
 - per-language normalization anchors (§2.4) and the label-free objectives for per-language weights (§4.3)
 - checking where the new metric and chrF3 **disagree** on system rankings. These cases are worth inspecting by hand, and they would be the first items to send to human raters if a human check (Phase 10) happens.
 
-**g. Field-test judgments of Scripture Forge drafts.** The 2025 NT field test and a second trial asked translation teams to judge real drafts in their own languages. `btmetric-collect-field-tests` reads the workbooks (exported from Google Drive with rclone) into one table, with each team's project and MT source in `btmetric/datasets/field_test_teams.tsv`:
+**g. Field-test judgments of Scripture Forge drafts.** The 2025 NT field test and a second trial asked translation teams to judge real drafts in their own languages. `btmetric-collect-field-tests` reads the workbooks (exported from Google Drive with rclone) into one table, with each team's project, MT source and trial start in a teams table kept with the workbooks (not in this repo):
 
 | Activity | Judged verses | With a reference | Reference from before the trial |
 |---|---|---|---|
@@ -561,9 +561,9 @@ None beats chrF3 alone; the detectors mostly tie. They matter only in combinatio
 | Human vs. AI: would this draft have helped, beside the team's own translation | 134 | 119 | about 100 |
 | Correction: the team's post-edit of a draft | 547 | not yet used | |
 
-References come from the latest extract of the team's project. **Many are not independent of the drafts.** Several second-trial projects added the judged verses after the trial by editing AI drafts. In Team 18 and Team 20 about half the "references" are near-copies of one draft, and they favour Draft A while the teams preferred Draft B (Team 20: 40 to 7). So each verse records the first extract it appears in, and a reference counts as independent only if it predates the trial's drafts (taken as just after the extracts the trial models trained on). For Team 3, the experiment configs and the drafts' orthography confirm the project; the MT source is `rw-SRC`, although the sheets show SRC2.
+References come from the latest extract of the team's project. **Many are not independent of the drafts.** Several projects in the second trial added the judged verses after the trial by editing AI drafts. In two of them about half the "references" are near-copies of one draft, and they favour Draft A while the teams preferred Draft B (40 to 7 in one). So each verse records the first extract it appears in, and a reference counts as independent only if it predates the trial's drafts (taken as just after the extracts the trial models trained on). For one team, the experiment configs and the drafts' orthography confirm the project and MT source where the sheets show a different source.
 
-The teams themselves agree on only **63%** of verse preferences (130 verse pairs that two groups or judges both decided), so the judgments are noisy. This is not an upper limit for a metric: if each team picks the better draft 75% of the time, two teams agree only 62.5% of the time, while a metric that always picks the better draft agrees with a team 75% of the time. The 63% also comes from different teams than the independent-reference pairs below (mostly Team 12, Team 13 and Team 2). Agreement of each feature with the teams (`btmetric-field-test-agreement`), with metric ties counting as wrong:
+The teams themselves agree on only **63%** of verse preferences (130 verse pairs that two groups or judges both decided), so the judgments are noisy. This is not an upper limit for a metric: if each team picks the better draft 75% of the time, two teams agree only 62.5% of the time, while a metric that always picks the better draft agrees with a team 75% of the time. The 63% also comes from different teams than the independent-reference pairs below (mostly three teams). Agreement of each feature with the teams (`btmetric-field-test-agreement`), with metric ties counting as wrong:
 
 | Feature | Verse preference, independent refs (128 pairs) | All refs (413) | Model comparisons won, independent (all) | Usability, independent |
 |---|---|---|---|---|
@@ -576,14 +576,14 @@ The teams themselves agree on only **63%** of verse preferences (130 verse pairs
 | coverage-reference | 0.46 | 0.45 | 4/5 (8/14) | 0.54 |
 
 - **Coverage does best, the opposite of WMT news**, where it rewarded literal translation (§2.2.2). These teams prefer the draft that renders more of the source, which suits Bible drafting, where omissions are costly.
-- **Coverage barely depends on the reference.** It is relative to the reference, which mostly cancels between two drafts of one verse, so it survives references written from a draft (Team 20: chrF3 0.17, coverage-target 0.81).
+- **Coverage barely depends on the reference.** It is relative to the reference, which mostly cancels between two drafts of one verse, so it survives references written from a draft (in one such project, chrF3 0.17 and coverage-target 0.81).
 - **chrF3 and coverage carry different information.** Their verse-level differences hardly correlate (r = 0.19). Adding standardized chrF3 and coverage-target gives 0.68 on independent references.
-- **Teams vary.** chrF3 does better on Team 1, Team 13 and Team 16; coverage on Team 2, Team 14 and Team 3.
+- **Teams vary.** chrF3 does better for three teams, coverage for three others.
 - **Detectors and key terms rarely separate two drafts of one verse** (5–20% of pairs), so their accuracy looks low. Where they decide, they are right 0.56–0.75 of the time, on too few pairs to judge.
 - **Usability and "would it help" are weaker signals.** chrF3 is best on usability at 0.60; no feature beats chance on human vs. AI (about 100 verses).
 - **The samples are small:** ±0.09 on 128 pairs, and only 5 model comparisons with independent references.
 
-Team 25 adds 54 usability ratings (chrF3 still leads on usability, at 0.57). Team 24 adds nothing usable: every verse was marked "correct".
+Two teams trialled separately: one adds 54 usability ratings (chrF3 still leads on usability, at 0.57), and the other adds nothing usable, since every verse was marked "correct".
 
 **Verse analyses.** The compiled feedback workbooks also hold each team's analysis of about 22–45 verses (624 in all, 23 teams): same basic meaning, clear, sounds right, hard to read aloud, confusing, a checklist of error types, a score out of 100, and the edit proportion of the team's later correction of the same verse. Drafts come from the teams' verse selection sheets. Within each team, how often a feature ranks two analysed verses as the team rated them (all project references; few are independent):
 
@@ -637,7 +637,7 @@ The calques reorder each MT output's words by the mean source position of their 
 - **chrF already catches most calques and scrambles**: reordering breaks character n-grams. chrF-B + 40 × word-order raises verse preference with independent references from 0.617 to 0.656, within noise at this sample size.
 - **Neither enters chrF-B.** `word-order-literal` is a candidate diagnostic for drafts that follow the source order too closely.
 
-Still to do: the teams' corrections as references (they post-edit the very draft judged, so they mostly measure edit distance), and the Team 24 and Team 25 error analyses (a transposed layout).
+Still to do: the teams' corrections as references (they post-edit the very draft judged, so they mostly measure edit distance), and the error analyses of the two separately trialled teams (a transposed layout).
 
 ### 3.4 Baselines
 
@@ -835,7 +835,7 @@ chrF-B scored directly on every test, against chrF3:
 
 chrF-B is better than chrF3 on every Bible-domain test overall; it gives up a few points on omissions, truncation and removed negations. It is not for general-domain text (on WMT news, coverage cost 17 points at system level), it rates single verses no better than chrF3, and dynamic translations still lose to most MT systems against a single reference. Still open: the weights rest on 5 independent comparisons and 128 verse pairs, key terms use inferred renderings only (curated Paratext renderings could replace them where a project has them), and normalization across languages (§2.4) is tested but not implemented: a shuffled-verse floor helps slightly, no ceiling does.
 
-**Alignment as silnlp does it (October 2026).** The numbers above pair verses and align them as silnlp's chrF-B scorer does, with eflomal's default iteration schedule and grow-diag-final-and symmetrization, silnlp's default. Both implementations give 72.55 on a Team 1 field-test experiment. Thot's default symmetrization (och) was also tried:
+**Alignment as silnlp does it (October 2026).** The numbers above pair verses and align them as silnlp's chrF-B scorer does, with eflomal's default iteration schedule and grow-diag-final-and symmetrization, silnlp's default. Both implementations give 72.55 on a field-test experiment. Thot's default symmetrization (och) was also tried:
 
 - **Usability favours grow-diag-final-and.** Resampling teams (paired bootstrap, 10,000 samples), it is ahead of och by 6.3 points on independent references (in every resample, but only 5 teams) and by 1.8 on all (87%). Only grow-diag-final-and beats chrF3 on usability (in 97–99% of resamples). Verse preference is a tie.
 - **och is slightly better elsewhere:** verse preference 0.641 against 0.617 (within the tie above), comparisons won 10/14 against 9/14, repeated text caught 0.95 against 0.92. Silver and the human-translation test don't change.

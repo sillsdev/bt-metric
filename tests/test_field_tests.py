@@ -40,7 +40,7 @@ def test_verse_numbers_follow_the_passage_heading_into_its_next_chapter():
 def test_comparison_sheets_are_read_past_their_titles_and_blank_responses(tmp_path: Path):
     workbook = openpyxl.Workbook()
     sheet = workbook.active
-    sheet.append(["Draft Comparison - Team 2 (Group 1)"])
+    sheet.append(["Draft Comparison - Team A (Group 1)"])
     sheet.append([])
     sheet.append(["Mark 10:17-31", "NIV11", "Draft A", "Draft B", "Response"])
     sheet.append([17, "As Jesus started", "a17", "b17", "Draft A is better."])
@@ -60,7 +60,7 @@ def test_references_come_from_the_latest_extract_and_count_as_independent_only_i
     (tmp_path / "vref.txt").write_text("MRK 1:1\nMRK 1:2\n", encoding="utf-8")
     (tmp_path / "xyz-P_2025_08_01.txt").write_text("old one\n\n", encoding="utf-8")
     (tmp_path / "xyz-P_2025_12_01.txt").write_text("new one\nnew two\n", encoding="utf-8")
-    table = pd.DataFrame({"trial": "nt_field_test", "target_extract": "xyz-P", "vref": ["MRK 1:1", "MRK 1:2"]})
+    table = pd.DataFrame({"target_extract": "xyz-P", "vref": ["MRK 1:1", "MRK 1:2"], "trial_start": "2025-09-03"})
     table = attach_references(table, [tmp_path], tmp_path / "vref.txt")
     assert table["reference"].tolist() == ["new one", "new two"]
     assert table["reference_first_seen"].tolist() == ["2025-08-01", "2025-12-01"]
@@ -93,22 +93,12 @@ def test_metric_agreement_with_preferences_per_verse_and_per_comparison():
     assert summary["verses"] == 3 and summary["human_margin"] == 0.0
 
 
-def test_a_team_trialled_separately_uses_its_own_cutoff(tmp_path: Path):
-    (tmp_path / "vref.txt").write_text("MRK 1:1\n", encoding="utf-8")
-    (tmp_path / "xyz-P_2025_06_01.txt").write_text("one\n", encoding="utf-8")
-    table = pd.DataFrame(
-        {"trial": "nt_field_test", "target_extract": "xyz-P", "vref": "MRK 1:1", "trial_start": ["", "2025-05-01"]}
-    )
-    table = attach_references(table, [tmp_path], tmp_path / "vref.txt")
-    assert table["independent_reference"].tolist() == [True, False]
-
-
 def test_compiled_verse_analyses_are_read_per_verse_with_good_answers_as_one(tmp_path: Path):
     from btmetric.datasets.field_tests import read_verse_analyses
 
     workbook = openpyxl.Workbook()
     sheet = workbook.active
-    sheet.append(["", "", "Team 16", "", ""])
+    sheet.append(["", "", "Team B", "", ""])
     sheet.append(["", "", "MAT 9:26-34", "", "MAT 23:16-28"])
     sheet.append(["", "", 26, 27, 16])
     sheet.append(["General Observations", "Hard to read aloud?", "Y", "N", "N"])
@@ -137,11 +127,11 @@ def test_passage_tables_give_each_verse_its_source_and_draft(tmp_path: Path):
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.title = "Verse Analysis & Correction"
-    sheet.append(["MAT 9:26-34", "CHLNBT", "Team 12 Draft"])
+    sheet.append(["MAT 9:26-34", "SRC", "Team C Draft"])
     sheet.append([26, "source 26", "draft 26"])
     sheet.append([27, "source 27", "draft 27"])
     sheet.append([])
-    sheet.append(["MAT 23:16-28", "CHLNBT", "Team 12 Draft"])
+    sheet.append(["MAT 23:16-28", "SRC", "Team C Draft"])
     sheet.append([16, "source 16", "draft 16"])
     path = tmp_path / "Verse Selections.xlsx"
     workbook.save(path)

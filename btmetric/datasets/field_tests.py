@@ -1,7 +1,8 @@
-"""Human judgments of Scripture Forge drafts from the 2025 field tests (the NT field test and a second trial).
+"""Human judgments of Scripture Forge drafts from the 2025 field tests.
 
-The workbooks are exported from Google Drive with rclone (README). Teams filled in sheets of four kinds, each with a
-header row naming its columns, in English, French or Indonesian:
+The workbooks are exported from Google Drive with rclone (README), one folder per trial, beside a teams table
+(`teams.tsv`) giving each team's folder, language, projects, trial start and other names it goes by. Teams filled in
+sheets of four kinds, each with a header row naming its columns, in English, French or Indonesian:
 
     usability    a draft verse, and whether the team would correct it or start over from the source Bible
     comparison   two drafts of a verse from different models, and which is better (or both equally good or poor)
@@ -114,8 +115,11 @@ class Team:
     language: str
     target_extract: str
     source_extract: str
-    # For teams trialled apart from the rest of their trial; otherwise TRIAL_STARTS applies.
-    trial_start: str = ""
+    # When the team's drafts were made, just after the extracts its models were trained on. A reference verse already
+    # in the project before then can't have been written from the drafts; one that appeared later may have been.
+    trial_start: str
+    # Other names the compiled feedback workbooks use for the team, comma-separated.
+    aliases: str = ""
 
 
 class FieldTestTeams:
@@ -123,8 +127,8 @@ class FieldTestTeams:
         self._teams = teams
 
     @classmethod
-    def load(cls) -> "FieldTestTeams":
-        table = pd.read_csv(Path(__file__).with_name("field_test_teams.tsv"), sep="\t", dtype=str).fillna("")
+    def load(cls, path: Path) -> "FieldTestTeams":
+        table = pd.read_csv(path, sep="\t", dtype=str).fillna("")
         return cls([Team(**row) for row in table.to_dict("records")])
 
     def all(self) -> List[Team]:
@@ -324,8 +328,6 @@ ERROR_TYPES = [
 ]
 ANALYSIS_LABELS = [column for column, _ in ANALYSIS_QUESTIONS.values()] + ["score", "edit_proportion"]
 ANALYSIS_LABELS += ["error_" + error.replace(" ", "_") for error in ERROR_TYPES]
-# Team names in the compiled sheets that differ from the folder names.
-_TEAM_ALIASES = {"team3": "Team 3", "team15": "Team 15", "team20": "Team 20"}
 
 
 def _rows(path: Path, sheet_filter=None) -> Iterator[Tuple[str, List[List[str]]]]:
@@ -404,11 +406,12 @@ def read_passage_texts(path: Path) -> pd.DataFrame:
 def collect_analyses(root: Path, teams: FieldTestTeams, corrections: pd.DataFrame) -> pd.DataFrame:
     """The verse analyses with each verse's draft and the team's correction of it, where known."""
     by_name = {t.folder.lower(): t for t in teams.all()}
+    by_name.update({alias.strip().lower(): t for t in teams.all() for alias in t.aliases.split(",") if alias.strip()})
     analyses = []
     for path in sorted(root.rglob("Compile Feedback*.xlsx")):
         analyses.append(read_verse_analyses(path).assign(trial=path.relative_to(root).parts[0]))
     analyses = pd.concat(analyses, ignore_index=True)
-    # One regional workbook repeats the main workbook's sheets for its five teams.
+    # One regional workbook repeats the main workbook's sheets for its teams.
     analyses = analyses.drop_duplicates(["team_name", "vref"])
     texts = []
     for path in sorted(root.rglob("*.xlsx")):
@@ -419,7 +422,7 @@ def collect_analyses(root: Path, teams: FieldTestTeams, corrections: pd.DataFram
     records = []
     for row in analyses.to_dict("records"):
         key = row.pop("team_name").lower()
-        team = by_name.get(key) or by_name.get(_TEAM_ALIASES.get(key, "").lower())
+        team = by_name.get(key)
         if team is None:
             team = next((t for t in teams.all() if t.folder.lower().startswith(key)), None)
         if team is None:
@@ -461,12 +464,6 @@ def collect_analyses(root: Path, teams: FieldTestTeams, corrections: pd.DataFram
     )
 
 
-# When each trial's drafts were made: just after the extracts its models were trained on (xyz-ABC_2025_09_02, the
-# second-trial projects' 2025_10_21-22 extracts). A reference verse already in the project before then can't have been
-# written from the drafts; one that appeared later may have been, which biases it toward the draft the team imported.
-TRIAL_STARTS = {"nt_field_test": "2025-09-03", "trial_2": "2025-10-23"}
-
-
 def dated_extracts(scripture_dirs: Iterable[Path], project: str) -> List[Tuple[str, Path]]:
     """Every extract of a project, oldest first, with its date ("" for an undated one)."""
     extracts = []
@@ -505,11 +502,9 @@ def attach_references(table: pd.DataFrame, scripture_dirs: Iterable[Path], vref_
         extracts.append(versions[-1][1] if versions else "")
         first_seen.append(next((date for date, _, lines in versions if text(lines)), "") if latest else "")
     table = table.assign(reference=references, reference_extract=extracts, reference_first_seen=first_seen)
-    starts = table["trial"].map(TRIAL_STARTS)
-    if "trial_start" in table:
-        starts = table["trial_start"].where(table["trial_start"] != "", starts)
     return table.assign(
-        independent_reference=(table["reference_first_seen"] != "") & (table["reference_first_seen"] < starts)
+        independent_reference=(table["reference_first_seen"] != "")
+        & (table["reference_first_seen"] < table["trial_start"])
     )
 
 
@@ -518,12 +513,13 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Collect the field-test judgments into one table")
     parser.add_argument("--root", type=Path, default=Path("data/external/field_tests"))
+    parser.add_argument("--teams", type=Path, help="The teams table (default: teams.tsv in --root)")
     parser.add_argument("--output", type=Path, default=Path("data/field_tests/judgments.tsv"))
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
     corpus = BibleCorpus()
-    teams = FieldTestTeams.load()
+    teams = FieldTestTeams.load(args.teams or args.root / "teams.tsv")
     judgments = collect(args.root, teams)
     analyses = collect_analyses(args.root, teams, judgments[judgments["kind"] == "correction"])
     table = pd.concat([judgments, analyses], ignore_index=True)

@@ -217,14 +217,13 @@ uv run btmetric-silver-agreement agree                                   # pairw
 
 ## Field-test judgments
 
-Translation teams judged Scripture Forge drafts in the 2025 field tests: usability, comparisons of two models' drafts, and corrections. Export the two Google Drive folders as .xlsx with a read-only rclone remote (create it once with `rclone config create gdrive drive scope=drive.readonly`):
+Translation teams judged Scripture Forge drafts in the 2025 field tests: usability, comparisons of two models' drafts, and corrections. The workbooks aren't public; ask the SIL Language Technology team for access. Export each trial's Google Drive folder as .xlsx with a read-only rclone remote (create it once with `rclone config create gdrive drive scope=drive.readonly`), and put the teams table (`teams.tsv`: each team's folder, language, target and source extracts, trial start and other names) beside the trial folders:
 
 ```
-rclone copy gdrive: data/external/field_tests/nt_field_test --drive-root-folder-id <folder id> --drive-export-formats xlsx
-rclone copy gdrive: data/external/field_tests/trial_2 --drive-root-folder-id <folder id> --drive-export-formats xlsx
+rclone copy gdrive: data/external/field_tests/<trial> --drive-root-folder-id <folder id> --drive-export-formats xlsx
 ```
 
-Collect every judged verse into one table, with references from each team's project (`btmetric/datasets/field_test_teams.tsv`) and whether each reference predates the trial's drafts. Then score features and measure how often they side with the teams:
+Collect every judged verse into one table, with references from each team's project and whether each reference predates the trial's drafts. Then score features and measure how often they side with the teams:
 
 ```
 uv run btmetric-collect-field-tests
@@ -267,7 +266,7 @@ uv run btmetric-test-human-translations --features bt-nllb --source-extract hbo-
 - **COMET scores are cached** in `data/cache/comet_scores.sqlite` as each chunk is scored, and progress (segments done, rate, time left) is logged per chunk. A stopped run resumes where it left off.
 - **Tests on the CPU while the GPU is busy:** some tests train small models on CUDA, so run them with `CUDA_VISIBLE_DEVICES=-1`. On Windows an empty value does not hide the GPU.
 
-Generated and downloaded files go in `data/`, which is not committed.
+Generated and downloaded files go in `data/`, which is not committed: most of it is Scripture text or translation teams' work that isn't ours to publish. `results/` holds copies of the summary tables behind the figures in PLAN.md, which contain only scores.
 
 ## Layout
 

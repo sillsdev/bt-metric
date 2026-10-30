@@ -187,7 +187,7 @@ def flag_report(rows: pd.DataFrame, judgments: pd.DataFrame) -> pd.DataFrame:
 
 
 def agreement_report(rows: pd.DataFrame, metrics: List[str]) -> pd.DataFrame:
-    """Over all references, and over only those written before the trial (see field_tests.TRIAL_STARTS)."""
+    """Over all references, and over only those written before the trial (see field_tests.Team.trial_start)."""
     return pd.concat(
         [
             _agreement(rows[rows["independent"]], metrics).assign(references="independent"),
