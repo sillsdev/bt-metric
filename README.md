@@ -1,6 +1,6 @@
 # bt-metric
 
-Research toward a translation quality metric for minority language Bible translation. See [PLAN.md](PLAN.md) for the research plan.
+Research behind chrF-B, a metric for scoring machine-translated Bible drafts in minority languages: chrF3 plus 60 × alignment coverage plus 20 × key-term accuracy. The metric itself is being added to silnlp as a scorer; this repo holds the experiments that designed and tested it. See [PLAN.md](PLAN.md) for the methods and results.
 
 ## Setup
 
