@@ -45,3 +45,25 @@ def test_bible_pairs_compare_metric_and_silver_preferences_within_each_test_set(
     # t1 has one silver tie (systems 2 and 3), which is skipped; t2's metric disagrees with the silver label.
     assert sorted(pairs["difference"].tolist()) == [5.0, 10.0, 10.0]
     assert pairs.groupby("dataset")["agrees"].all().to_dict() == {"t1": True, "t2": False}
+
+
+def test_bands_cap_each_test_set_and_interval_the_agreement():
+    from btmetric.analysis.significance import band_table
+
+    # t1 has 20 small pairs that all disagree; capped at 10 they weigh as much as t2's 10 agreeing pairs.
+    pairs = pd.DataFrame(
+        {
+            "dataset": ["t1"] * 20 + ["t2"] * 10 + ["t3"] * 4,
+            "difference": [0.2] * 30 + [-5.0] * 4,
+            "agrees": [False] * 20 + [True] * 10 + [True, True, True, False],
+        }
+    )
+    capped = band_table(pairs, cap=10, resamples=200).set_index("band")
+    assert capped.loc["0-0.5", "pairs"] == 30
+    assert abs(capped.loc["0-0.5", "agreement"] - 0.5) < 1e-9
+    assert abs(capped.loc["0-0.5", "agreement_uncapped"] - 1 / 3) < 1e-9
+    assert capped.loc["0-0.5", "lower"] <= 0.5 <= capped.loc["0-0.5", "upper"]
+    assert abs(capped.loc["over 4", "agreement"] - 0.75) < 1e-9
+    assert capped.loc["1-2", "pairs"] == 0 and np.isnan(capped.loc["1-2", "agreement"])
+    uncapped = band_table(pairs, cap=None, resamples=10).set_index("band")
+    assert abs(uncapped.loc["0-0.5", "agreement"] - 1 / 3) < 1e-9

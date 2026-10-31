@@ -967,15 +967,15 @@ For system comparison, knowing **when a difference is meaningful** is as importa
 
 **Bible-domain thresholds for chrF3 and chrF-B (October 2026).** No human rankings of Bible systems exist, so the silver table stands in (§3.3c): 1,340 pairs of past silnlp systems on the same test set, with xCOMET-XL's preference in place of the humans'. The pairs come from 162 test sets of up to 300 verses (median 250, as few as 7). System scores are as users see them: corpus chrF3, and chrF-B as corpus chrF3 + 60 × mean coverage + 20 × mean key-term share (`btmetric-significance-thresholds --silver-rows data/results/silver_rows.tsv`).
 
-Most test sets give one pair, but one experiment gives 276 (20%), mostly checkpoints and near-identical configs. So each test set's pairs are capped at a total weight of 10 (each pair weighted min(1, 10 ÷ the test set's pairs)), and intervals resample whole test sets (1,000 times). The cap isn't in `btmetric-significance-thresholds` yet; the uncapped numbers are what it prints.
+Most test sets give one pair, but one experiment gives 276 (20%), mostly checkpoints and near-identical configs. So each test set's pairs are capped at a total weight of 10 (each pair weighted min(1, 10 ÷ the test set's pairs)), and intervals resample whole test sets (1,000 times). `btmetric-significance-thresholds --cap 10` writes these bands to `results/significance_thresholds_bible_bands.tsv`.
 
 | System-level difference | chrF3: xCOMET-XL agrees, cap 10 (uncapped; pairs) | chrF-B: cap 10 (uncapped; pairs) | chrF-B, cap 10: 95% interval |
 |---|---|---|---|
-| 0–0.5 points | 0.62 (0.61; 362) | 0.55 (0.56; 251) | 0.47–0.62 |
+| 0–0.5 points | 0.62 (0.61; 362) | 0.55 (0.56; 251) | 0.47–0.63 |
 | 0.5–1 | 0.77 (0.79; 210) | 0.74 (0.73; 211) | 0.65–0.82 |
-| 1–2 | 0.83 (0.81; 262) | 0.82 (0.83; 268) | 0.74–0.89 |
+| 1–2 | 0.83 (0.81; 262) | 0.82 (0.83; 268) | 0.74–0.88 |
 | 2–4 | 0.85 (0.77; 220) | 0.85 (0.81; 197) | 0.77–0.92 |
-| over 4 | 0.88 (0.83; 286) | 0.86 (0.86; 413) | 0.76–0.95 |
+| over 4 | 0.88 (0.83; 286) | 0.86 (0.86; 413) | 0.77–0.94 |
 
 - **The same shape as on news:** under half a point, agreement is not much better than a coin flip; from half a point to 1 it is in the 70s; from 1 point it reaches the 80s and levels off near 85%. The plateau is partly xCOMET-XL's own error, so the true ceiling is unknown, and the logistic curve's "90%" differences (13–17 points) are extrapolations.
 - **The cap changes little.** Caps of 5 and 20 and equal weight per test set give the same bands within a few points. It removes the uncapped 2–4 dip below 1–2, which came from the 276-pair experiment, so agreement rises steadily with the difference.

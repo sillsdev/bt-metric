@@ -250,11 +250,13 @@ How large a system-level difference must be before humans reliably agree with it
 uv run btmetric-significance-thresholds
 ```
 
-The same for chrF3 and chrF-B on Bible system pairs, with xCOMET-XL's preference from the silver table in place of humans':
+The same for chrF3 and chrF-B on Bible system pairs, with xCOMET-XL's preference from the silver table in place of humans'. `--cap 10` weights each test set's pairs to a total of at most 10, so one experiment's many near-identical systems don't dominate (PLAN.md §5):
 
 ```
-uv run btmetric-significance-thresholds --silver-rows data/results/silver_rows.tsv --output data/results/significance_thresholds_bible.tsv
+uv run btmetric-significance-thresholds --silver-rows data/results/silver_rows.tsv --output data/results/significance_thresholds_bible.tsv --cap 10
 ```
+
+Each run also writes agreement by size of difference, with 95% intervals from resampling whole test sets, beside the output (`significance_thresholds_bible_bands.tsv` here).
 
 The human-translation test can also score with a different source text, e.g. Hebrew script where the experiment used a transliteration that reverse models can't read:
 
