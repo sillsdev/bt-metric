@@ -3,6 +3,8 @@ name = "btmetric"
 version = "0.1.0"
 description = "Research behind chrF-B, a metric for scoring machine-translated Bible drafts in minority languages"
 authors = [{ name = "SIL International" }]
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "numpy>=2.2.6,<3.0.0",
