@@ -2,7 +2,7 @@
 name = "btmetric"
 version = "0.1.0"
 description = "Research behind chrF-B, a metric for scoring machine-translated Bible drafts in minority languages"
-authors = [{ name = "SIL International" }]
+authors = [{ name = "SIL Global" }]
 license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.12,<3.13"
