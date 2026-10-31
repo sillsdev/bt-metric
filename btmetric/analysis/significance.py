@@ -10,8 +10,9 @@ past silnlp systems on the same test set, with xCOMET-XL's preference in place o
 
 import argparse
 import logging
+import warnings
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -120,6 +121,53 @@ def score_pairs(scores: pd.DataFrame, metric: str) -> pd.DataFrame:
     return pd.concat(rows, ignore_index=True)
 
 
+BANDS = [(0, 0.5, "0-0.5"), (0.5, 1, "0.5-1"), (1, 2, "1-2"), (2, 4, "2-4"), (4, np.inf, "over 4")]
+
+
+def band_table(pairs: pd.DataFrame, cap: Optional[float], resamples: int = 1000, seed: int = 0) -> pd.DataFrame:
+    """Agreement by size of difference, with a 95% interval from resampling whole test sets.
+
+    One experiment can put hundreds of near-identical pairs on a test set, so with a cap each test set's pairs
+    share a total weight of at most `cap` (each pair weighted min(1, cap / the test set's pairs)).
+    """
+    pairs = pairs.reset_index(drop=True)
+    edges = [low for low, _, _ in BANDS] + [np.inf]
+    band = pd.cut(pairs["difference"].abs(), edges, labels=[label for _, _, label in BANDS], include_lowest=True)
+    per_dataset = pairs.groupby("dataset")["difference"].transform("size")
+    weight = np.ones(len(pairs)) if cap is None else np.minimum(1.0, cap / per_dataset.to_numpy())
+    agrees = pairs["agrees"].to_numpy(dtype=float)
+    codes = band.cat.codes.to_numpy()
+
+    def weighted_agreement(rows: np.ndarray) -> np.ndarray:
+        total = np.bincount(codes[rows], weights=weight[rows], minlength=len(BANDS))
+        agreed = np.bincount(codes[rows], weights=weight[rows] * agrees[rows], minlength=len(BANDS))
+        with np.errstate(invalid="ignore"):
+            return agreed / total
+
+    rows_by_dataset = list(pairs.groupby("dataset").indices.values())
+    rng = np.random.default_rng(seed)
+    resampled = np.array(
+        [
+            weighted_agreement(np.concatenate([rows_by_dataset[i] for i in picks]))
+            for picks in rng.integers(0, len(rows_by_dataset), size=(resamples, len(rows_by_dataset)))
+        ]
+    )
+    with warnings.catch_warnings():
+        # A band with no pairs has no interval.
+        warnings.simplefilter("ignore", RuntimeWarning)
+        lower, upper = np.nanpercentile(resampled, [2.5, 97.5], axis=0)
+    return pd.DataFrame(
+        {
+            "band": [label for _, _, label in BANDS],
+            "pairs": np.bincount(codes, minlength=len(BANDS)),
+            "agreement": weighted_agreement(np.arange(len(pairs))),
+            "lower": lower,
+            "upper": upper,
+            "agreement_uncapped": pairs.groupby(band, observed=False)["agrees"].mean().to_numpy(),
+        }
+    )
+
+
 def threshold_table(pairs: pd.DataFrame, probabilities: List[float]) -> dict:
     curve = AgreementCurve().fit(pairs["difference"].to_numpy(), pairs["agrees"].to_numpy())
     row = {"pairs": len(pairs), "agreement": float(pairs["agrees"].mean())}
@@ -140,6 +188,13 @@ def main() -> None:
     )
     parser.add_argument("--silver", default="xCOMET-XL", help="With --silver-rows: the label column")
     parser.add_argument("--output", type=Path, default=Path("data/results/significance_thresholds.tsv"))
+    parser.add_argument(
+        "--bands-output",
+        type=Path,
+        help="Where to write agreement by size of difference (default: beside --output, ending _bands.tsv)",
+    )
+    parser.add_argument("--cap", type=float, help="Cap each test set's pairs at this total weight in the bands")
+    parser.add_argument("--resamples", type=int, default=1000, help="Test-set resamples for the bands' intervals")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
@@ -157,17 +212,18 @@ def main() -> None:
                 pairs_by_feature[feature.name] = system_pairs(outputs_list, feature)
             finally:
                 feature.close()
-    rows, buckets = [], []
+    rows, bands = [], []
     for name, pairs in pairs_by_feature.items():
         rows.append({"feature": name, **threshold_table(pairs, args.probabilities)})
-        bins = pd.cut(pairs["difference"].abs(), [0, 0.5, 1, 2, 4, np.inf], include_lowest=True)
-        bucket = pairs.groupby(bins, observed=True)["agrees"].agg(["mean", "size"])
-        buckets.append(bucket.assign(feature=name))
+        bands.append(band_table(pairs, args.cap, args.resamples).assign(feature=name, cap=args.cap))
     table = pd.DataFrame(rows)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     table.to_csv(args.output, sep="\t", index=False)
+    band_rows = pd.concat(bands, ignore_index=True)
+    band_rows = band_rows[["feature", "band", "cap", "pairs", "agreement", "lower", "upper", "agreement_uncapped"]]
+    band_rows.to_csv(args.bands_output or args.output.with_name(f"{args.output.stem}_bands.tsv"), sep="\t", index=False)
     LOGGER.info(f"Metric difference needed for humans to agree with its direction:\n{table.round(2).to_string()}")
-    LOGGER.info(f"Agreement by size of difference:\n{pd.concat(buckets).round(2).to_string()}")
+    LOGGER.info(f"Agreement by size of difference:\n{band_rows.round(2).to_string()}")
 
 
 if __name__ == "__main__":
